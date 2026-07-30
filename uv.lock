@@ -2023,7 +2023,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scienceplots", marker = "extra == 'viz'", specifier = ">=2.2.0" },
     { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.11" },
-    { name = "torch", marker = "extra == 'torch-potentials'", specifier = ">=2.0", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "torch", marker = "extra == 'torch-potentials'", specifier = ">=2.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "vermouth", marker = "extra == 'martini'", specifier = ">=0.15.0" },
 ]

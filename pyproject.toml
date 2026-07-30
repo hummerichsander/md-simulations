@@ -108,8 +108,14 @@ index-strategy = "unsafe-best-match"
 mlcg = { git = "https://github.com/ClementiGroup/mlcg.git" }
 # CUDA-13 wheels for the cgschnet stack (mirrors mlcg's cu130 setup, which uv
 # does not inherit from a dependency).
-torch = { index = "torch-cu130" }
-torch-cluster = { index = "pyg-cu130" }
+# Deliberately NO torch / torch-cluster index pins. uv applies a git dependency's
+# own [tool.uv.sources], so pinning torch to the cu130 index here forced that CUDA
+# line on every consumer -- and mixing it with PyPI-resolved nvidia-* wheels yields
+# an inconsistent stack (missing libcudnn.so.9 / libcusparseLt.so.0, i.e. `import
+# torch` fails outright). The CUDA line is the top-level project's call: for the
+# cgschnet extra install with `uv sync --extra cgschnet --torch-backend=cu130`, or
+# add the pins below to your own project. The index definitions are kept (explicit,
+# so they are only consulted when something is pinned to them).
 
 [[tool.uv.index]]
 name = "torch-cu130"
