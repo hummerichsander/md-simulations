@@ -22,6 +22,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Resolves openawsem from PyPI. CAVEAT: release 1.1.1 is missing the `PDBParser`
+# and `product` imports inside `read_memory` (functionTerms/templateTerms.py), so
+# any config with `use_associative_memory: true` raises NameError. Until that is
+# fixed upstream, point [tool.uv.sources] at a patched checkout *in your own
+# top-level project* (not here -- see the note in [tool.uv.sources] below).
 awsem = ["openawsem"]
 martini = ["vermouth>=0.15.0", "insane>=1.2.0"]
 # gromacs: requires an external `gmx` binary on PATH (module load gromacs/...).
@@ -94,14 +99,12 @@ no-build-isolation-package = ["torch-cluster"]
 index-strategy = "unsafe-best-match"
 
 [tool.uv.sources]
-# NOTE: machine-local absolute path. openawsem 1.1.1 is on PyPI, but this checkout
-# carries a local fix adding the missing `PDBParser`/`product` imports inside
-# `read_memory` (functionTerms/templateTerms.py), which the associative-memory
-# path needs -- without it the `awsem` engine raises NameError. Point this at your
-# own checkout, or drop the line to take the unpatched PyPI release. uv only honors
-# [tool.uv.sources] from the top-level project, so a project depending on
-# md-simulations must declare its own openawsem source regardless.
-openawsem = { path = "/remote/gpu04/hummerich/repos/openawsem", editable = true }
+# Deliberately NO openawsem entry: uv *does* apply a git/path dependency's own
+# [tool.uv.sources], so a machine-local `openawsem = { path = ... }` here gets
+# rewritten relative to this repo's checkout and then collides with the consuming
+# project's own openawsem source ("conflicting URLs for package openawsem").
+# openawsem therefore resolves from PyPI by default. See the `awsem` extra above
+# for the patch that release is missing.
 mlcg = { git = "https://github.com/ClementiGroup/mlcg.git" }
 # CUDA-13 wheels for the cgschnet stack (mirrors mlcg's cu130 setup, which uv
 # does not inherit from a dependency).
