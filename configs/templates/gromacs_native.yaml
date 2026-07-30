@@ -1,0 +1,27 @@
+# Template: native GROMACS MD via `gmx grompp` + `gmx mdrun`.
+# Requires a `gmx` binary on PATH (load it in the SLURM job via modules, below).
+# Run parameters (nsteps, dt, thermostat, cutoffs) come from the .mdp, not this file.
+engine: gromacs_native                 # engine selector (do not change)
+system: my-system                      # short system name (shown in logs/summary)
+output_subdir: my-system/gmx_run       # output directory, relative to the data root
+# data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+
+input_gro: my-system/conf.gro          # input coordinates (GRO), relative to data root
+top: my-system/topol.top               # GROMACS topology (TOP), relative to data root
+mdp: my-system/prod.mdp                # run parameters (.mdp); owns nsteps/dt/ensemble
+index: null                            # optional index (.ndx) file; null = none
+gmx: gmx                               # GROMACS binary name on PATH
+mdrun_extra:                           # extra flags passed to `gmx mdrun`
+  - -ntmpi
+  - "1"
+
+num_steps: 0                           # informational only (real nsteps come from the mdp)
+
+slurm:
+  job_name: md-my-system               # SBATCH --job-name
+  partition: a30                       # SBATCH --partition
+  gres: gpu:1                          # SBATCH --gres (gpu:0 for CPU-only)
+  time: 1-00:00:00                     # SBATCH --time (D-HH:MM:SS)
+  mem: 8G                              # SBATCH --mem
+  modules:                             # `module load` lines emitted into the job script
+    - gromacs

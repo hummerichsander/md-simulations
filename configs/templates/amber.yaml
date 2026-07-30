@@ -1,0 +1,36 @@
+# Template: all-atom AMBER engine (explicit solvent via PME, or implicit GB).
+# Copy to configs/<name>.yaml and edit. Run: md-sim run configs/<name>.yaml
+engine: amber                          # engine selector (do not change)
+system: my-system                      # short system name (shown in logs/summary)
+output_subdir: my-system/AMBER14_300K  # output directory, relative to the data root
+# data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+
+input_pdb: pdbs/input.pdb              # input structure, relative to the data root
+forcefield:                            # OpenMM force-field XML files (order matters)
+  - amber14-all.xml                    #   solute force field
+  - amber14/tip3pfb.xml                #   water model params (explicit); or implicit/gbn2.xml
+ph: 7.0                                # pH used when adding missing hydrogens
+padding: 1.0                           # water-box padding around the solute (nm); explicit only
+water_model: tip3p                     # water model for solvation; explicit only
+nonbonded_cutoff: 1.0                  # nonbonded cutoff (nm); use ~2.0 for implicit solvent
+implicit_solvent: false                # true = GB implicit solvent (no water box, non-periodic)
+salt_conc: 0.0                         # implicit-solvent monovalent salt (mol/L); implicit only
+
+num_steps: 50000000                    # total integration steps
+output_freq: 1000                      # steps between trajectory / energy / force writes
+report_interval: 1000                  # steps between stdout progress reports
+temperature: 300                       # temperature (K)
+friction: 1.0                          # Langevin friction coefficient (ps^-1)
+timestep: 0.002                        # integration timestep (ps)
+integrator: langevin                   # langevin | langevin_middle
+minimize_energy: true                  # energy-minimise before production
+log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+slurm:                                 # resources for `md-sim gen-slurm`
+  job_name: md-my-system               # SBATCH --job-name
+  partition: a30                       # SBATCH --partition
+  gres: gpu:1                          # SBATCH --gres (e.g. gpu:1)
+  time: 0-40:00:00                     # SBATCH --time (D-HH:MM:SS)
+  mem: 20G                             # SBATCH --mem
+  # nodelist: gpu05                    # optional: pin to specific node(s)
+  # modules: []                        # optional: `module load` lines

@@ -1,0 +1,31 @@
+# Simulation data and outputs — never committed (but keep the data/ README).
+data/*
+!data/README.md
+output/
+slurm/output/
+*.dcd
+*.xtc
+*.trr
+*.edr
+*.tpr
+*.cpt
+*.log
+forces.txt
+energies.csv
+final_structure.pdb
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.python-version.local
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Environment
+.env

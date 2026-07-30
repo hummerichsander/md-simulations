@@ -1,0 +1,33 @@
+# Template: OpenMM MD built directly from GROMACS-format inputs (e.g. FreeSolv).
+# Reads a .gro/.top pair; no ForceField XML, no added hydrogens/solvent.
+engine: gromacs_input                  # engine selector (do not change)
+system: my-mol                         # short system name (shown in logs/summary)
+output_subdir: my-mol/gmx_input        # output directory, relative to the data root
+# data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+
+input_gro: my-mol/solvated.gro         # GROMACS coordinates, relative to data root
+input_top: my-mol/solvated.top         # GROMACS topology, relative to data root
+nonbonded_cutoff: 1.0                  # nonbonded cutoff (nm)
+switch_distance: 0.9                   # LJ switching distance (nm)
+ewald_error_tolerance: 1.0e-6          # PME/Ewald error tolerance
+use_barostat: false                    # true = add a Monte Carlo barostat (approx. NPT)
+pressure: 1.01325                      # barostat pressure (bar); used only if use_barostat
+barostat_interval: 25                  # barostat attempt interval (steps)
+initialize_velocities: false           # true = seed velocities from the temperature
+
+num_steps: 500000                      # total integration steps
+output_freq: 1000                      # steps between trajectory / energy / force writes
+report_interval: 100                   # steps between stdout progress reports
+temperature: 298.15                    # temperature (K)
+friction: 1.0                          # Langevin friction coefficient (ps^-1)
+timestep: 0.002                        # integration timestep (ps)
+integrator: langevin_middle            # langevin | langevin_middle (analogue of GROMACS sd)
+minimize_energy: true                  # energy-minimise before production
+log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+slurm:
+  job_name: md-my-mol                  # SBATCH --job-name
+  partition: a30                       # SBATCH --partition
+  gres: gpu:1                          # SBATCH --gres
+  time: 0-40:00:00                     # SBATCH --time (D-HH:MM:SS)
+  mem: 20G                             # SBATCH --mem

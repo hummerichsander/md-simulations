@@ -1,0 +1,24 @@
+# Fs-peptide, MARTINI3 coarse-grained (OpenMM), 300 K, from GRO/TOP.
+# Ported from split-flows-public/slurm/md_simulation_FSP-MARTINI.sh
+engine: martini
+system: fs-peptide
+output_subdir: fs-peptide/MARTINI_300K
+
+input_gro: fs-peptide/fs-peptide-cg-solvated.gro
+top: fs-peptide/fs-peptide-cg.top
+include_dir: martini_v300/martini_v300
+cutoff: 1.1
+
+num_steps: 250000000
+output_freq: 50
+report_interval: 1000
+temperature: 300
+timestep: 0.020
+friction: 1.0
+
+slurm:
+  job_name: md-fs-peptide-cg-gromacs
+  partition: gshort
+  gres: gpu:0
+  time: 0-40:00:00
+  mem: 60G

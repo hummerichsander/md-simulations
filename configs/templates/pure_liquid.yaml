@@ -1,0 +1,30 @@
+# Template: NPT MD of a pre-built, fully periodic box (no solvation/hydrogens added).
+# Suitable for pure liquids / pre-solvated boxes. Copy to configs/<name>.yaml.
+engine: pure_liquid                    # engine selector (do not change)
+system: my-liquid                      # short system name (shown in logs/summary)
+output_subdir: my-liquid/CHARMM36_300K # output directory, relative to the data root
+# data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+
+input_pdb: my-liquid/box.pdb          # pre-built periodic-box PDB, relative to data root
+forcefield:                            # OpenMM force-field XML files
+  - charmm36.xml                       #   base force field
+  - charmm36/water.xml                 #   water params
+  # - custom_residue.xml               #   bundled custom XML are resolved by name
+pressure: 1.0                          # Monte Carlo barostat pressure (bar)
+
+num_steps: 50000000                    # total integration steps
+output_freq: 1000                      # steps between trajectory / energy / force writes
+report_interval: 1000                  # steps between stdout progress reports
+temperature: 300                       # temperature (K)
+friction: 1.0                          # Langevin friction coefficient (ps^-1)
+timestep: 0.002                        # integration timestep (ps)
+integrator: langevin                   # langevin | langevin_middle
+minimize_energy: true                  # energy-minimise before production
+log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+slurm:
+  job_name: md-my-liquid               # SBATCH --job-name
+  partition: a30                       # SBATCH --partition
+  gres: gpu:1                          # SBATCH --gres
+  time: 0-40:00:00                     # SBATCH --time (D-HH:MM:SS)
+  mem: 20G                             # SBATCH --mem

@@ -1,0 +1,29 @@
+# Trialanine (ala3), all-atom AMBER14 + TIP3P-FB, explicit, 360 K.
+# Ported from split-flows-public/slurm/md_simulation_ala3.sh
+# NOTE: the original script fed ala6/ala6.pdb into the ala3 output directory;
+# preserved verbatim here — correct the input_pdb if that was unintended.
+engine: amber
+system: ala3
+output_subdir: ala3/AMBER14_360K
+
+input_pdb: ala6/ala6.pdb
+forcefield:
+  - amber14-all.xml
+  - amber14/tip3pfb.xml
+ph: 7.0
+padding: 1.0
+water_model: tip3p
+
+num_steps: 5000000
+output_freq: 100
+report_interval: 100
+temperature: 360
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: md-ala3-openmm
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

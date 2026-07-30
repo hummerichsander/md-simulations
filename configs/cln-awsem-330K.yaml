@@ -1,0 +1,32 @@
+# Chignolin, OpenAWSEM coarse-grained, 330 K, single associative memory.
+# Ported from split-flows-public/slurm/md_simulation_CLN-AWSEM.sh
+# Requires the 'awsem' extra: uv sync --extra awsem
+engine: awsem
+system: cln
+output_subdir: cln/AWSEM_330K_10mw
+
+input_pdb: pdbs/1UAO.pdb
+prepare: true
+chains: A
+k_awsem: 1.0
+
+use_associative_memory: true
+memory_pdbs:
+  - pdbs/1UAO-cleaned.pdb
+memory_weights:
+  - 0.8
+am_min_seq_sep: 2
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: cln-awsem-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-24:00:00
+  mem: 20G

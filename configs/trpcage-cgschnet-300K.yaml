@@ -1,0 +1,27 @@
+engine: cgschnet
+system: trp-cage
+output_subdir: trp-cage/CGSchNet_300K_10replicas
+
+input_pdb: pdbs/2JOF_5B-CG.pdb
+configurations_file: trp-cage/CGSchNet_300K/configurations.pt
+model_file: models/cgschnet/transferable_model_and_prior.reexport.pt
+
+device: cuda
+dtype: float32
+model_energy_unit: kcal/mol
+replica: 0
+n_replicas: 10
+
+num_steps: 10000000
+output_freq: 1000
+report_interval: 1000
+temperature: 300
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: trp-cage-cgschnet-300K
+  partition: a30
+  gres: gpu:1
+  time: 0-24:00:00
+  mem: 20G

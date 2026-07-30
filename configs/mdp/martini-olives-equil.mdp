@@ -1,0 +1,28 @@
+integrator      = md
+nsteps          = 50000        ; 0.1 ns at 2 fs
+dt              = 0.02         ; 20 fs — standard Martini timestep
+
+nstxout-compressed = 1000
+nstlog          = 1000
+nstenergy       = 1000
+
+nstlist         = 20
+cutoff-scheme   = Verlet
+ns_type         = grid
+vdwtype         = cutoff
+vdw-modifier    = Potential-shift
+rcoulomb        = 1.1
+rvdw            = 1.1
+coulombtype     = reaction-field
+epsilon_rf      = 15
+
+tcoupl          = v-rescale
+tc-grps         = System
+tau_t           = 1.0
+ref_t           = 320
+
+pcoupl          = no
+
+constraints     = none
+gen_vel         = yes
+gen_temp        = 320

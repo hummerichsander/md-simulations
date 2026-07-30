@@ -1,0 +1,137 @@
+[project]
+name = "md-simulations"
+version = "0.1.0"
+description = "Standalone molecular dynamics simulation engines (OpenMM + GROMACS), config-driven and cluster-ready."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Jonas Hummerich", email = "hummerich@thphys.uni-heidelberg.de" },
+]
+# Core + all extras except cgschnet run on 3.10-3.12. The cgschnet extra pins
+# 3.12 (mlcg is ==3.12.*) via a marker below, so it is simply unavailable on
+# 3.10/3.11 rather than forcing the whole project (and its consumers) to 3.12.
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "openmm>=8.4.0.post2",
+    "mdtraj>=1.10.3",
+    "parmed>=4.3.1",
+    "numpy>=1.26",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "tqdm>=4.67.1",
+]
+
+[project.optional-dependencies]
+awsem = ["openawsem"]
+martini = ["vermouth>=0.15.0", "insane>=1.2.0"]
+# gromacs: requires an external `gmx` binary on PATH (module load gromacs/...).
+gromacs = []
+# ML coarse-grained (CGSchNet / Clementi-group mlcg) via OpenMM-Torch.
+# openmm-torch now ships PyPI wheels, so this is a fully uv-resolvable extra.
+# mlcg pins Python ==3.12.*, so the dependency is marker-gated to 3.12 and this
+# extra resolves to nothing on 3.10/3.11 (use a 3.12 env for cgschnet).
+# The CUDA-13 build matches the cluster's cuda/13.0; on a CUDA-12 host use
+# openmmtorch[cuda12] instead, and install torch with the matching backend
+# (e.g. `uv sync --extra cgschnet --torch-backend=cu130`).
+cgschnet = [
+    # Dynamics run via mlcg's own Langevin integrator (not OpenMM-Torch), so the
+    # only requirement is mlcg. Its cu130 extra pins torch==2.11.0 and pulls
+    # torch-cluster + cuequivariance from the PyG/pytorch CUDA-13 wheel indexes
+    # configured under [tool.uv] below.
+    "mlcg[cu130]; python_full_version >= '3.12'",
+]
+viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
+# Trajectory analysis (TICA and related dimensionality reduction).
+analysis = ["deeptime>=0.4.4", "scipy>=1.11"]
+# Differentiable torch potentials built from a config (see
+# md_simulations.torch_potentials). openmm is already a core dep, so
+# OpenMMCalculator needs nothing extra; ase supplies the engine-agnostic
+# calculator contract and torch the autograd bridge. NOTE: `torch` resolves from
+# the cu130 index configured under [tool.uv]; on a CPU-only host install with
+# `uv sync --extra torch-potentials --torch-backend=cpu`.
+torch-potentials = ["torch>=2.0", "ase>=3.22"]
+# Everything at once. NOTE: `all` includes `cgschnet`, so it inherits the heavy
+# CUDA-13 torch stack and needs the [tool.uv] cu130 index setup below (and a
+# CUDA-13 host, or `--torch-backend` override) -- same constraint the standalone
+# `cgschnet` extra carries.
+all = [
+    "md-simulations[awsem,martini,gromacs,cgschnet,viz,analysis,torch-potentials]",
+]
+
+[project.urls]
+Homepage = "https://github.com/hummerichsander/md-simulations"
+Repository = "https://github.com/hummerichsander/md-simulations"
+
+[dependency-groups]
+# Installed by default with `uv sync` / kept by `uv run` (unlike extras).
+dev = ["ruff>=0.14.10", "pytest>=7.0.0", "pytest-cov>=4.0.0"]
+
+[project.scripts]
+md-sim = "md_simulations.cli:main"
+md-sim-umbrella = "md_simulations.sampling.umbrella:main"
+md-sim-cgschnet-map = "md_simulations.prep.cgschnet_map:main"
+md-sim-cgschnet-embeddings = "md_simulations.prep.cgschnet_embeddings:main"
+md-sim-cgschnet-reexport = "md_simulations.prep.cgschnet_reexport:main"
+md-sim-tica = "md_simulations.analysis.tica:main"
+md-sim-cvs = "md_simulations.analysis.cvs:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/md_simulations"]
+
+[tool.uv]
+# mace-torch 0.3.16 over-pins e3nn==0.4.4 while mlcg needs e3nn 0.5.3. mlcg's own
+# pyproject applies this same override, but uv only honors override/index config
+# from the top-level project, so it must be repeated here (mlcg is a git dep).
+override-dependencies = ["e3nn==0.5.3"]
+# Fallback: build torch-cluster from source (against the installed torch) if no
+# pre-built PyG wheel matches the platform.
+no-build-isolation-package = ["torch-cluster"]
+# Needed so torch's transitive nvidia-* deps resolve across the torch/PyG indexes.
+index-strategy = "unsafe-best-match"
+
+[tool.uv.sources]
+# NOTE: machine-local absolute path. openawsem 1.1.1 is on PyPI, but this checkout
+# carries a local fix adding the missing `PDBParser`/`product` imports inside
+# `read_memory` (functionTerms/templateTerms.py), which the associative-memory
+# path needs -- without it the `awsem` engine raises NameError. Point this at your
+# own checkout, or drop the line to take the unpatched PyPI release. uv only honors
+# [tool.uv.sources] from the top-level project, so a project depending on
+# md-simulations must declare its own openawsem source regardless.
+openawsem = { path = "/remote/gpu04/hummerich/repos/openawsem", editable = true }
+mlcg = { git = "https://github.com/ClementiGroup/mlcg.git" }
+# CUDA-13 wheels for the cgschnet stack (mirrors mlcg's cu130 setup, which uv
+# does not inherit from a dependency).
+torch = { index = "torch-cu130" }
+torch-cluster = { index = "pyg-cu130" }
+
+[[tool.uv.index]]
+name = "torch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pyg-cu130"
+url = "https://data.pyg.org/whl/torch-2.11.0+cu130.html"
+format = "flat"
+
+[tool.ruff]
+# 100 rather than the default 88, matching how torch_potentials/ was written. The
+# enforced gate is `ruff check`, whose default rule set has no line-length rule, so
+# this only affects `ruff format` -- and the tree has never been format-clean at
+# either width (21 files would change at 88, 15 at 100), so nothing regresses.
+line-length = 100
+exclude = [
+    "tests",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    # Vendored third-party script kept verbatim (see its header/citation).
+    "src/md_simulations/prep/olives.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

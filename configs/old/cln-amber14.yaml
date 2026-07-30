@@ -1,0 +1,27 @@
+# Chignolin, all-atom AMBER14 + TIP3P-FB, explicit solvent, 340 K.
+# Ported from split-flows-public/slurm/md_simulation_CLN-AMBER14.sh
+engine: amber
+system: cln
+output_subdir: cln/AMBER14_340K
+
+input_pdb: pdbs/1UAO.pdb
+forcefield:
+  - amber14-all.xml
+  - amber14/tip3pfb.xml
+ph: 7.0
+padding: 1.0
+water_model: tip3p
+
+num_steps: 500000000
+output_freq: 1000
+report_interval: 1000
+temperature: 340
+friction: 0.1
+timestep: 0.002
+
+slurm:
+  job_name: md-cln-amber14
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

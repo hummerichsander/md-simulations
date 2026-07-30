@@ -1,0 +1,28 @@
+# Chignolin, all-atom AMBER14 with GBn2 implicit solvent, 330 K.
+
+engine: amber
+system: cln
+output_subdir: cln/AMBER14_implicit_obc2_330K
+
+input_pdb: pdbs/1UAO.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/obc2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: cln-amber14-implicit-obc2-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

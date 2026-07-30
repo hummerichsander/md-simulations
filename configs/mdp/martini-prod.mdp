@@ -1,0 +1,51 @@
+; Production NPT MD — MARTINI CG
+; Mirrors CHARMM36 Langevin NPT settings at 300 K, 1 bar
+;
+;   AA:  dt=0.002 ps, nsteps=50 000 000 → 100 ns, output every 1000 steps = 2 ps
+;   CG:  dt=0.020 ps, nsteps= 5 000 000 → 100 ns, output every  100 steps = 2 ps
+;
+; Note: MARTINI dynamics are ~4× faster than real time due to the smoother CG
+; energy landscape, so 100 ns CG time corresponds to ~400 ns effective time.
+
+; --- Integrator -----------------------------------------------------------
+integrator               = sd           ; stochastic dynamics (Langevin), matches OpenMM LangevinMiddleIntegrator
+nsteps                   = 5000000      ; 100 ns at 20 fs/step
+dt                       = 0.02         ; 20 fs — standard MARTINI timestep
+
+; --- Output (2 ps cadence, matching AA output-freq=1000 × 0.002 ps = 2 ps) -
+nstxout-compressed       = 100
+compressed-x-precision   = 1000
+nstlog                   = 500          ; log every 10 ps
+nstenergy                = 100          ; energy every 2 ps
+
+; --- Non-bonded interactions (standard MARTINI reaction-field) -------------
+cutoff-scheme            = Verlet
+verlet-buffer-tolerance  = 0.005
+nstlist                  = 20
+vdwtype                  = cutoff
+vdw-modifier             = Potential-shift
+rvdw                     = 1.1
+rcoulomb                 = 1.1
+coulombtype              = reaction-field
+epsilon_rf               = 15           ; dielectric constant outside cutoff for CG
+
+; --- Thermostat (embedded in sd integrator) --------------------------------
+; AA uses friction=1.0 ps^-1; sd integrator uses tau_t = 1/gamma = 1.0 ps
+tcoupl                   = no           ; thermostat handled by sd integrator
+tc-grps                  = System
+tau_t                    = 1.0          ; 1/gamma; gamma=1 ps^-1 — matches AA friction=1.0
+ref_t                    = 300          ; K — matches AA temperature
+
+; --- Barostat — NPT to mirror AA Monte Carlo barostat at 1 bar ------------
+pcoupl                   = Parrinello-Rahman
+pcoupltype               = isotropic
+tau_p                    = 12.0         ; ps — standard MARTINI value
+ref_p                    = 1.0          ; bar — matches AA pressure
+compressibility          = 3e-4         ; bar^-1
+
+; --- Bonds — CG bonded potentials handle connectivity ---------------------
+constraints              = none
+
+; --- Continuation from equilibration --------------------------------------
+gen_vel                  = no
+continuation             = yes

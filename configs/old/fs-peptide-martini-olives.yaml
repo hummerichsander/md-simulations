@@ -1,0 +1,34 @@
+# Fs-peptide, MARTINI3 + OLIVES H-bond network, NATIVE GROMACS.
+# Ported from split-flows-public/slurm/md_simulation_FSP-MARTINI-OLIVES.sh
+# Requires the 'gromacs' extra and a `gmx` binary on PATH (module load gromacs/...).
+#
+# LIMITATION: the original is a multi-stage shell workflow — OLIVES prep
+# (md_simulations.prep.olives, modifies molecule_0.itp in place) followed by
+# em -> equil -> prod. This config models only the PRODUCTION mdrun. Run OLIVES
+# prep and the em/equil stages beforehand (see the original script), or drive
+# them via a dedicated workflow script (follow-up work).
+engine: gromacs_native
+system: fs-peptide
+output_subdir: fs-peptide/MARTINI_olives_prod
+
+input_gro: fs-peptide/md_simulations/MARTINI/processed/fs-peptide-cg-solvated.gro
+top: fs-peptide/md_simulations/MARTINI/processed/system.top
+mdp: fs-peptide/md_simulations/MARTINI/mdp/prod.mdp
+mdrun_extra:
+  - -ntmpi
+  - "1"
+  - -noddcheck
+  - -rdd
+  - "2.0"
+
+# nsteps is taken from the mdp; kept here for the log banner only.
+num_steps: 0
+
+slurm:
+  job_name: md-fsp-martini-olives
+  partition: a30
+  gres: gpu:1
+  time: 1-00:00:00
+  mem: 8G
+  modules:
+    - gromacs

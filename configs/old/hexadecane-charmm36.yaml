@@ -1,0 +1,27 @@
+# Hexadecane pure liquid, CHARMM36 + custom hexadecane params, NPT, 300 K.
+# Ported from split-flows-public/slurm/md_simulation_HEXDEC-CHARMM36.sh
+# charmm36_hexadecane.xml is bundled in the package and resolved by name.
+engine: pure_liquid
+system: hexadecane
+output_subdir: hexadecane/CHARMM36_300K
+
+input_pdb: hexadecane/hexadecane_box.pdb
+forcefield:
+  - charmm36.xml
+  - charmm36/water.xml
+  - charmm36_hexadecane.xml
+pressure: 1.0
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 300
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: md-hexdec-charmm36
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

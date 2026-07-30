@@ -1,0 +1,27 @@
+# Fs-peptide, all-atom AMBER ff19SB + OPC (TIP4P-Ew geometry), explicit, 300 K.
+# Ported from split-flows-public/slurm/md_simulation_FSP-AMBER19.sh
+engine: amber
+system: fs-peptide
+output_subdir: fs-peptide/ff19SB_300K_10
+
+input_pdb: fs-peptide/fs-peptide.pdb
+forcefield:
+  - amber19-all.xml
+  - amber19/opc.xml
+ph: 7.0
+padding: 1.2
+water_model: tip4pew
+
+num_steps: 250000000
+output_freq: 500
+report_interval: 500
+temperature: 300
+friction: 0.1
+timestep: 0.002
+
+slurm:
+  job_name: md-fs-peptide-openmm
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

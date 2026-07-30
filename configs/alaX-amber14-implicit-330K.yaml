@@ -1,0 +1,32 @@
+# Alanine dipeptide, all-atom AMBER14 with GBn2 implicit solvent, 330 K.
+# Configured for dynamics learning: fine frame spacing (10 fs) over a long
+# trajectory so short-time kinetics are resolved and many φ/ψ transitions are
+# sampled at the elevated 330 K.
+
+engine: amber
+system: ala12
+output_subdir: alaX/ala12_AMBER14_implicit_330K
+
+input_pdb: pdbs/ala12.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 5000000        # 5,000,000 steps = 10 ns
+output_freq: 1            # save every 1 steps = 2 fs → 5,000,000 frames
+report_interval: 50000    # stdout log every 100 ps (logging only, not data)
+temperature: 330
+friction: 1.0
+timestep: 0.002
+integrator: langevin_middle
+
+slurm:
+  job_name: alaX-amber14-implicit-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

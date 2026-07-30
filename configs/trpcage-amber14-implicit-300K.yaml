@@ -1,0 +1,28 @@
+# Trp-cage (2JOF), all-atom AMBER14 with GBn2 implicit solvent, 300 K.
+# Ported from split-flows-public/slurm/md_simulation_TRPCage-AMBER14-IS.sh
+engine: amber
+system: trp-cage
+output_subdir: trp-cage/AMBER14_implicit_300K
+
+input_pdb: pdbs/2JOF.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 300
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: trp-cage-amber14-implicit-300K
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

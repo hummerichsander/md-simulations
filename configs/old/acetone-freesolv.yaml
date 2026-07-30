@@ -1,0 +1,24 @@
+# Acetone (FreeSolv mobley_3867265), OpenMM from GROMACS solvated inputs, NPT.
+# Ported from split-flows-public/slurm/md_simulation_acetone-free-solv.sh
+engine: gromacs_input
+system: acetone
+output_subdir: acetone/FreeSolv_mobley_3867265
+
+input_gro: FreeSolv-0.51/gromacs_solvated/mobley_3867265.gro
+input_top: FreeSolv-0.51/gromacs_solvated/mobley_3867265.top
+use_barostat: true
+initialize_velocities: true
+
+num_steps: 500000
+output_freq: 1000
+report_interval: 100
+temperature: 298.15
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: md-acetone-free-solv
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G
