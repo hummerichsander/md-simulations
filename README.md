@@ -209,10 +209,10 @@ the replicas).
 
 ## Differentiable potentials
 
-`md_simulations.torch_potentials` turns any OpenMM-family config into a
+`md_simulations.torch_potentials` turns an OpenMM-family or `cgschnet` config into a
 **torch-differentiable** potential energy, so ML code can score configurations
 against the same force field that defines a simulation — without re-specifying the
-system. Needs the `torch-potentials` extra.
+system. Needs the `torch-potentials` extra (`cgschnet-potentials` for the CG model).
 
 ```python
 import mdtraj as md
@@ -245,9 +245,10 @@ boundary.
 - **Force groups** — `groups=` (a bitmask or set of indices) restricts the
   evaluation to a subset of OpenMM force groups, so you can score individual
   energy terms.
-- **Gradients are first-order only.** The engine is opaque to autograd (`backward`
-  reconstructs the gradient from the engine's forces), so there are no Hessians
-  and no double-backward.
+- **Gradients are first-order only** on the ASE path. The engine is opaque to
+  autograd (`backward` reconstructs the gradient from the engine's forces), so there
+  are no Hessians and no double-backward. The cgschnet potential below is the
+  exception.
 - **Adding an engine** — write an ASE `Calculator` under
   `torch_potentials/calculators/` and pass it to `Potential`; the bridge is
   engine-agnostic and neither it nor `Potential` needs changing.
@@ -255,6 +256,57 @@ boundary.
 Lower-level entry points: `build_calculator` / `build_calculator_from_file` return
 the ASE calculator alone (no torch needed), and `Potential(topology, calculator)`
 binds one yourself. See `examples/torch_potentials/`.
+
+### Coarse-grained ML potentials (CGSchNet / mlcg)
+
+`cgschnet` takes the other route. Its mlcg model is neither TorchScriptable nor an ASE
+backend, but it *is* already a differentiable torch module, so `build_potential` returns
+a native `CGSchNetPotential` instead of wrapping an ASE calculator. `build_calculator`
+raises for this engine. Both types satisfy the `PotentialLike` protocol, so callers see
+one interface.
+
+```bash
+uv sync --extra cgschnet-potentials     # needs Python 3.12: mlcg pins ==3.12.*
+```
+
+```python
+pot = build_potential_from_file(
+    cg_topology, "configs/trpcage-cgschnet-300K.yaml", data_root="data"
+)
+with torch.no_grad():
+    energy = pot(R)                     # (B, 97, 3) nm -> (B,) kJ/mol
+```
+
+What differs from the ASE path:
+
+- **Second derivatives work.** The distributed checkpoint wraps every term in an
+  `mlcg.nn.gradients.GradientsOut` force head that calls `torch.autograd.grad` and then
+  detaches `data.pos` — which raises under `torch.no_grad()` and disconnects every term
+  after the first from the caller's positions. `unwrap_energy_models` strips those
+  shells, leaving a plainly differentiable composition (and ~50× less work when only the
+  energy is wanted).
+- **Frames batch into one forward**, on-device, with no numpy round trip. Chunked at
+  `max_batch_frames=64`; the 15 Å radius graph is rebuilt from the coordinates each
+  forward, so cost grows with the frame count.
+- **Bead order is checked, not assumed.** The prior interaction lists index bead
+  *positions*, so a CG topology ordered differently from the model's own (e.g. a
+  projected `N, CA, C, O, CB` against the model's `N, CA, CB, C, O`) would give silently
+  wrong energies. The potential derives the permutation from `input_pdb` by matching
+  `(residue index, atom name)` and applies it as an autograd op, so forces come back in
+  the caller's order. An unresolvable topology raises rather than falling back.
+- **Zero-interaction priors are pruned.** Terms for residue types absent from the
+  molecule have an empty `index_mapping`, and mlcg's priors `scatter` without
+  `dim_size`, so an empty term collapses the energy sum to length zero (18 of 51 terms
+  for trp-cage). mlcg handles this with `specialize_priors`, which is unusable here
+  because it bakes a fixed frame count into its static buffers.
+- **Non-periodic.** Every prior neighbour list has `rcut=None`, so passing
+  `unitcell_lengths` raises instead of being silently ignored.
+- **Construction is expensive** (a ~390 MB unpickle). Build once and reuse.
+
+`configurations_file` is required, not optional: it is the only source of the bead
+embedding indices and the prior neighbour lists. Accuracy against mlcg's own simulation
+output is ~2e-3 kJ/mol on energies and ~1e-4 relative on forces at float32
+(`tests/torch_potentials/test_cgschnet_regression.py`).
 
 ## Other tools
 

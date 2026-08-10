@@ -59,8 +59,11 @@ def setup_system(pdb_file: str, forcefield_files: list[str]) -> tuple[app.Modell
 Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere):
 
 - Prefer `torch.cat` / `torch.einsum` / `torch.stack` over manual loops
-- Keep the public torch API in **nm / kJ·mol⁻¹ / kJ·mol⁻¹·nm⁻¹**; convert at the
-  single boundary in `bridge.py`, never per-calculator
+- Keep the public torch API in **nm / kJ·mol⁻¹ / kJ·mol⁻¹·nm⁻¹**. Every conversion
+  factor is *defined* in `bridge.py`, never per-calculator. ASE-backed engines convert
+  inside `bridge.EnergyFn`; native-torch engines apply the factors as autograd ops at
+  their own module boundary, so their force conversion is derived rather than
+  hand-written
 - Torch imports stay out of the eager import path (see `torch_potentials/__init__.py`)
 
 ### Comments
@@ -123,7 +126,11 @@ plt.savefig("figure.pdf", dpi=400, bbox_inches="tight")
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the
   torch-backed names lazily so `import md_simulations` still works on a core
   install. New engines get an ASE calculator under `calculators/` — never a change
-  to `Potential` or `bridge`.
+  to `Potential` or `bridge`. The exception is an engine whose native representation
+  is *already* a differentiable, batched torch module: `cgschnet` therefore ships a
+  `PotentialLike` class in `cgschnet.py`, dispatched from `build_potential`, and still
+  touches neither `Potential` nor `bridge`. It imports torch only — mlcg arrives via
+  `torch.load` at build time, so the module stays importable without the extra.
 - `configs/*.yaml` — one versioned config per simulated system.
 - Simulation *data* lives outside the repo under a configurable data root
   (`MD_DATA_ROOT` env var or `--data-root`); never commit trajectories.

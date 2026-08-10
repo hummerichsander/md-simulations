@@ -55,6 +55,15 @@ analysis = ["deeptime>=0.4.4", "scipy>=1.11"]
 # the cu130 index configured under [tool.uv]; on a CPU-only host install with
 # `uv sync --extra torch-potentials --torch-backend=cpu`.
 torch-potentials = ["torch>=2.0", "ase>=3.22"]
+# The differentiable CG potential (md_simulations.torch_potentials.cgschnet) needs
+# both halves: mlcg to unpickle and run the model, torch/ase for the rest of the
+# package. mlcg pins Python ==3.12.*, so its half is marker-gated and this extra
+# degrades to plain torch-potentials on 3.10/3.11 -- where CGSchNetPotential simply
+# cannot be built. Same CUDA-13 caveat as the `cgschnet` extra.
+cgschnet-potentials = [
+    "md-simulations[torch-potentials]",
+    "mlcg[cu130]; python_full_version >= '3.12'",
+]
 # Everything at once. NOTE: `all` includes `cgschnet`, so it inherits the heavy
 # CUDA-13 torch stack and needs the [tool.uv] cu130 index setup below (and a
 # CUDA-13 host, or `--torch-backend` override) -- same constraint the standalone
@@ -95,6 +104,10 @@ override-dependencies = ["e3nn==0.5.3"]
 # Fallback: build torch-cluster from source (against the installed torch) if no
 # pre-built PyG wheel matches the platform.
 no-build-isolation-package = ["torch-cluster"]
+# python-hostlist 2.3.0 (mlcg -> mace-torch) is sdist-only and its setup.py calls
+# the `install_data` command, which setuptools 80 removed -- the build fails with
+# `error: invalid command 'install_data'` unless the build env is held back.
+build-constraint-dependencies = ["setuptools<80"]
 # Needed so torch's transitive nvidia-* deps resolve across the torch/PyG indexes.
 index-strategy = "unsafe-best-match"
 

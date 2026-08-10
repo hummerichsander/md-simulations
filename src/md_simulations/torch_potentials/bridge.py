@@ -29,6 +29,11 @@ EV_TO_KJMOL: float = 1.0 / (u.kJ / u.mol)
 # eV/A force -> kJ/mol/nm: convert the energy (*EV_TO_KJMOL) and the inverse
 # length (per-A -> per-nm multiplies by A-per-nm == NM_TO_ANG).
 FORCE_EV_ANG_TO_KJMOL_NM: float = EV_TO_KJMOL * NM_TO_ANG
+# 1 kcal/mol in kJ/mol. Not an ASE unit: mlcg-family models are native kcal/mol + A
+# rather than eV + A. Kept here so every conversion factor in the package has one
+# home, even though the native-torch potentials apply it at their own boundary (as an
+# autograd op, so their force conversion is derived rather than hand-written).
+KCALMOL_TO_KJMOL: float = 4.184
 
 
 class EnergyFn(torch.autograd.Function):

@@ -9,7 +9,11 @@ are torch tensors in nm / kJ.mol^-1; ASE is an internal implementation detail.
   point: a differentiable potential straight from a simulation config.
 - :func:`build_calculator` / :func:`build_calculator_from_file` -- the ASE
   calculator alone, for callers that do not want torch.
-- :class:`Potential` -- the differentiable, engine-backed potential.
+- :class:`Potential` -- the differentiable, ASE-engine-backed potential.
+- :class:`CGSchNetPotential` -- the native-torch potential for CGSchNet/mlcg
+  coarse-grained models, which have no ASE calculator. Batched over frames and twice
+  differentiable; needs the ``cgschnet-potentials`` extra (Python 3.12).
+- :class:`PotentialLike` -- the contract both potentials satisfy.
 - :func:`batched_potential_energy` -- evaluate several heterogeneous systems.
 
 The engine-agnostic ASE bridge lives in
@@ -31,9 +35,12 @@ from md_simulations.torch_potentials.build import (
     build_potential,
     build_potential_from_file,
 )
+from md_simulations.torch_potentials.protocol import PotentialLike
 
 __all__ = [
+    "CGSchNetPotential",
     "Potential",
+    "PotentialLike",
     "batched_potential_energy",
     "build_calculator",
     "build_calculator_from_file",
@@ -43,7 +50,11 @@ __all__ = [
 
 # Names whose modules import torch. Kept out of the eager import above so a
 # core-only install can still `import md_simulations` (see the module docstring).
+# `cgschnet` belongs here for torch alone: it imports no mlcg at module scope, so it
+# resolves on a plain torch-potentials install and only needs mlcg once a checkpoint
+# is actually unpickled.
 _LAZY: dict[str, tuple[str, str]] = {
+    "CGSchNetPotential": ("md_simulations.torch_potentials.cgschnet", "CGSchNetPotential"),
     "Potential": ("md_simulations.torch_potentials.potential", "Potential"),
     "batched_potential_energy": (
         "md_simulations.torch_potentials.batch",

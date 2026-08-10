@@ -3,7 +3,7 @@ system: trp-cage
 output_subdir: trp-cage/CGSchNet_300K_10replicas
 
 input_pdb: pdbs/2JOF_5B-CG.pdb
-configurations_file: trp-cage/CGSchNet_300K/configurations.pt
+configurations_file: trp-cage/configurations.pt
 model_file: models/cgschnet/transferable_model_and_prior.reexport.pt
 
 device: cuda
