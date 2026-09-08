@@ -153,6 +153,19 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Checked here rather than left to mdtraj, whose complaint about an unsupported "" topology
+    # format names neither the offending argument nor the empty string that produced it.
+    for name, label in (
+        ("config", "config"),
+        ("trajectory", "--trajectory"),
+        ("topology", "--topology"),
+    ):
+        path = getattr(args, name)
+        if not path:
+            parser.error(f"{label} is empty; check for an unset variable in the command line")
+        if not Path(path).is_file():
+            parser.error(f"{label} does not exist: {path}")
+
     config = load_config(args.config)
     data_root = resolve_data_root(config, args.data_root)
     args.out.parent.mkdir(parents=True, exist_ok=True)

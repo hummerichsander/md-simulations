@@ -61,13 +61,9 @@
 
 set -euo pipefail
 
-# Run from the directory the job was submitted from (the project root).
+# Run from the directory the job was submitted from (the project root), so that relative
+# arguments mean what they did on the submit line.
 cd "${SLURM_SUBMIT_DIR:-.}"
-mkdir -p ./slurm/output
-
-source .venv/bin/activate
-
-export MD_DATA_ROOT="${MD_DATA_ROOT:-$PWD/data}"
 
 if [[ $# -lt 3 ]]; then
     echo "usage: sbatch $0 <config> <trajectory> <topology>" >&2
@@ -78,6 +74,29 @@ fi
 CONFIG="$1"
 TRAJECTORY="$2"
 TOPOLOGY="$3"
+
+# Validated first, before the venv and before anything is built: an unset variable in the submit
+# line -- a `$SF` that was set in a different shell, say -- otherwise reaches relax.py as an empty
+# argument and surfaces there as an mdtraj complaint about an unsupported "" format, which names
+# neither the argument nor this script.
+for arg in CONFIG TRAJECTORY TOPOLOGY; do
+    path="${!arg}"
+    if [[ -z $path ]]; then
+        echo "error: $arg is empty -- check for an unset variable in the submit line" >&2
+        exit 2
+    fi
+    if [[ ! -f $path ]]; then
+        echo "error: $arg does not exist: $path" >&2
+        echo "       (relative paths resolve against $PWD)" >&2
+        exit 2
+    fi
+done
+
+mkdir -p ./slurm/output
+
+source .venv/bin/activate
+
+export MD_DATA_ROOT="${MD_DATA_ROOT:-$PWD/data}"
 
 RELAX_TIME="${RELAX_TIME:-2.0}"
 TIMESTEP="${TIMESTEP:-0.0005}"
