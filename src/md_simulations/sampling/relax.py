@@ -9,8 +9,22 @@ scores them not at all. The mismatch adds ``d / 2`` nats squared to the variance
 
 This tool re-thermalises those degrees of freedom without re-running the simulation. Each input
 frame is taken as a starting point, given fresh Maxwell-Boltzmann velocities, and integrated for a
-short time in the *unconstrained* potential. The slow degrees of freedom are already correctly
-distributed, so they need not move; only the stiff bonds have to find their thermal width.
+short time in the *unconstrained* potential, until the stiff bonds have found their thermal width.
+
+**Prefer ``sampling/resample_h_bonds.py`` for production.** It draws those lengths from the
+Gaussian this integration is converging to, which is exact, instant, and leaves everything else
+alone. This module is the ground truth that validated that draw, and the only path that assumes no
+factorisation of the target -- but it is the slower and blunter of the two, in two measured ways:
+
+- **It moves everything, by a lot.** The slow degrees of freedom are already correctly
+  distributed and do not *need* to move, but they do: on trp-cage, heavy-atom RMSD from the input
+  frame reaches 69 pm after 0.5 ps, 91 pm after 1 ps and **120 pm after 2 ps** -- the duration the
+  bond widths need. A relaxed frame is therefore a nearby configuration, not the input frame with
+  its hydrogens repaired, which confounds any before/after comparison of the slow coordinates.
+- **Freezing the heavy atoms does not help.** Zeroing their masses keeps the input structure
+  exactly, but thermalises the stretches *more slowly*, not faster: ratio to the analytic width at
+  2 ps is 0.930 frozen against 0.986 free. The heavy-atom motion is evidently a channel through
+  which the stiff mode reaches the bath, so removing it costs more than the drift it saves.
 
 Two things decide whether the output is usable, and both must be checked rather than assumed:
 
