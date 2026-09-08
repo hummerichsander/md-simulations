@@ -59,7 +59,12 @@ mkdir -p "$OUT_DIR"
 echo "=== shard ${TAG}: start=${SHARD_START} stride=${SHARD_STRIDE} (of ${N_TASKS} tasks) ==="
 echo "    config=${CONFIG} relax_time=${RELAX_TIME} ps timestep=${TIMESTEP} ps"
 
-md-sim-relax "$CONFIG" \
+# Invoked as a module, not through the `md-sim-relax` console script. Console-script wrappers are
+# written at install time, so an editable checkout that gains a new entry point does not get one
+# until it is reinstalled -- and `uv sync` here is not a safe way to do that: the venv carries the
+# cgschnet/awsem/dev extras, which a plain sync strips (measured: 206 packages uninstalled, 1
+# installed). The module path works off the editable install with no reinstall at all.
+python -m md_simulations.sampling.relax "$CONFIG" \
     --trajectory "$TRAJECTORY" \
     --topology "$TOPOLOGY" \
     --out "${OUT_DIR}/${OUT_PREFIX}_${TAG}.xtc" \
