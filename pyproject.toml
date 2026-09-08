@@ -74,6 +74,7 @@ dev = ["ruff>=0.14.10", "pytest>=7.0.0", "pytest-cov>=4.0.0"]
 [project.scripts]
 md-sim = "md_simulations.cli:main"
 md-sim-umbrella = "md_simulations.sampling.umbrella:main"
+md-sim-relax = "md_simulations.sampling.relax:main"
 md-sim-cgschnet-map = "md_simulations.prep.cgschnet_map:main"
 md-sim-cgschnet-embeddings = "md_simulations.prep.cgschnet_embeddings:main"
 md-sim-cgschnet-reexport = "md_simulations.prep.cgschnet_reexport:main"

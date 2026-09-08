@@ -73,6 +73,12 @@ class AmberConfig(_Common):
     nonbonded_cutoff: float = 1.0
     implicit_solvent: bool = False
     salt_conc: float = 0.0
+    # "hbonds" is what every trajectory in this repo was produced with, and a 2 fs timestep needs
+    # it. Set "none" only to build a *scoring* potential: OpenMM deletes the harmonic bond term of
+    # every constrained bond, so under "hbonds" the energy is nearly independent of the X-H bond
+    # lengths, and reweighting a generative model against it charges the model for coordinates the
+    # target has no opinion about. An unconstrained system needs a ~0.5 fs timestep to integrate.
+    constraints: Literal["hbonds", "allbonds", "none"] = "hbonds"
 
 
 class PureLiquidConfig(_Common):

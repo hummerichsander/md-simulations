@@ -1,9 +1,27 @@
+from typing import Literal
+
 import openmm.app as app
 import openmm.unit as unit
 
 from md_simulations.config import AmberConfig
 from md_simulations.engines.base import BuiltSystem, OpenMMEngine
 from md_simulations.forcefields import resolve_forcefield_files
+
+
+def resolve_constraints(kind: Literal["hbonds", "allbonds", "none"]) -> object | None:
+    """Translate the config's ``constraints`` value into OpenMM's own constant.
+
+    :param kind: The configured constraint scheme.
+    :return: The matching ``openmm.app`` constant, or ``None`` for no constraints."""
+    match kind:
+        case "hbonds":
+            return app.HBonds
+        case "allbonds":
+            return app.AllBonds
+        case "none":
+            return None
+        case _:
+            raise ValueError(f"unknown constraints scheme: {kind!r}")
 
 
 class AmberEngine(OpenMMEngine):
@@ -35,6 +53,8 @@ class AmberEngine(OpenMMEngine):
         self.logger.info("Adding hydrogens...")
         modeller.addHydrogens(forcefield, pH=cfg.ph)
 
+        self.logger.info(f"Constraints: {cfg.constraints}")
+
         if cfg.implicit_solvent:
             self.logger.info(
                 f"Implicit solvent (GB): no water box, salt = {cfg.salt_conc} mol/L."
@@ -42,7 +62,7 @@ class AmberEngine(OpenMMEngine):
             kwargs = dict(
                 nonbondedMethod=app.CutoffNonPeriodic,
                 nonbondedCutoff=cfg.nonbonded_cutoff * unit.nanometer,
-                constraints=app.HBonds,
+                constraints=resolve_constraints(cfg.constraints),
             )
             # OpenMM rejects a zero salt concentration as an unused argument.
             if cfg.salt_conc > 0.0:
@@ -60,7 +80,7 @@ class AmberEngine(OpenMMEngine):
             modeller.topology,
             nonbondedMethod=app.PME,  # type: ignore[arg-type]
             nonbondedCutoff=cfg.nonbonded_cutoff * unit.nanometer,  # type: ignore[arg-type]
-            constraints=app.HBonds,
+            constraints=resolve_constraints(cfg.constraints),
             ewaldErrorTolerance=0.0005,
         )
         return BuiltSystem(modeller.topology, system, modeller.positions)
