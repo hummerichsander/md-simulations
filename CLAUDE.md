@@ -81,9 +81,10 @@ Use a blank line, not a comment banner, to separate logical blocks.
 
 - **Linter/formatter**: `ruff` (configured in `pyproject.toml`; excludes `tests/`, `.venv/`)
 - **Package manager**: `uv`
-- **Python**: 3.10–3.12 for the core package and all extras except `cgschnet`;
-  the `cgschnet`/`mlcg` extra needs 3.12 (marker-gated, so it is unavailable on
-  3.10/3.11). The dev env (`.python-version`) is 3.12 so cgschnet is available.
+- **Python**: 3.10–3.12 for the core package and all extras except the `cgschnet`
+  family; `cgschnet`, `cgschnet-potentials` and `cgschnet-dataset` all pull `mlcg`,
+  which needs 3.12 (marker-gated, so it is unavailable on 3.10/3.11). The dev env
+  (`.python-version`) is 3.12 so all three are available.
 
 ### Visualization
 For visualization use matplotlib with the scienceplots theme:

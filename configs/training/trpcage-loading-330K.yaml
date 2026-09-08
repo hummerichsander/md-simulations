@@ -1,0 +1,10 @@
+# HDF key mapping for the 330 K fine-tune, referenced by path from
+# trpcage-cgschnet-finetune-330K.yaml for the same jsonargparse reason as the partitions.
+#
+# `forces: cg_delta_forces` is the important line: training targets the residual left after
+# the fixed analytic priors, not the total CG force. The priors are added back afterwards
+# with `mlcg-combine_model`.
+hdf_key_mapping:
+  embeds: attrs:cg_embeds
+  coords: cg_coords
+  forces: cg_delta_forces

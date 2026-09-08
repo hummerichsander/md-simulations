@@ -1,0 +1,54 @@
+# Trp-cage, fine-tuned CGSchNet at 330 K.
+#
+# `model_file` is the output of `mlcg-combine_model`, which merges the fine-tuned SchNet
+# checkpoint back with the 51 analytic priors it was trained against. Training targeted
+# `cg_delta_forces`, so the priors must be added back before the model is a force field:
+#
+#   mlcg-combine_model \
+#       --ckpt "data/models/cgschnet/finetune_330K_a30/ft-lr1e-3/ckpt/finetune-epoch=019-validation_loss=43.6049.ckpt" \
+#       --prior data/trp-cage/fm_330K/prior_only.pt \
+#       --out data/models/cgschnet/trpcage_finetuned_330K.pt
+#
+# That checkpoint is the best of the four-arm A30 sweep (slurm/trpcage-cgschnet-finetune-330K.sh):
+# held-out delta-force MSE 43.6049 against 46.68 for the pretrained SchNet, i.e. 92.0% of the
+# total CG force variance. Verified through this config's own load path at 43.81 on 1024
+# held-out frames. The 324,480-parameter architecture is a deliberate choice over a wider one:
+# a randomly initialised network of the same shape reached 43.74, so all three healthy arms of
+# the sweep found the same optimum and the pretrained weights are not what is carrying it.
+#
+# 330 K is not a free choice here. The CG PMF is a free energy, F(R;T) = U(R) - T S(R), and
+# its mapping entropy S(R) is strongly R-dependent across a folding transition, so weights
+# fitted at 330 K describe a well-defined ensemble only at 330 K. Running this at 300 K
+# would sample exp(-F_330/kT_300), which is neither the 300 K nor the 330 K CG marginal.
+#
+# Compare against the all-atom reference at the SAME temperature
+# (data/trp-cage/AMBER14_implicit_scan_330K), never against a 300 K run. The reference
+# folded population is 0.946 from that unseeded trajectory; the seeded replicas in the
+# training set start off-equilibrium by construction and are not a Boltzmann estimate.
+engine: cgschnet
+system: trp-cage
+output_subdir: trp-cage/CGSchNet_finetuned_330K
+
+input_pdb: pdbs/2JOF_5B-CG.pdb
+configurations_file: trp-cage/configurations.pt
+model_file: models/cgschnet/trpcage_finetuned_330K.pt
+
+device: cuda
+dtype: float32
+model_energy_unit: kcal/mol
+replica: 0
+n_replicas: 10
+
+num_steps: 10000000
+output_freq: 1000
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: trp-cage-cgschnet-finetuned-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-24:00:00
+  mem: 20G

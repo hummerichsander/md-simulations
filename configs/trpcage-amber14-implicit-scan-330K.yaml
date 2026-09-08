@@ -1,0 +1,31 @@
+# Trp-cage (2JOF), all-atom AMBER14 + GBn2 implicit solvent, 330 K.
+# Temperature-scan pilot: the 100 ns 300 K run never left the folded basin (Rg 0.687 +- 0.014 nm),
+# so this brackets the GBn2 melting temperature to find one where both states are populated.
+# Implicit solvent is required, not a shortcut: the split flow reconstructs the 284 solute atoms
+# only, so pot_aa must be evaluable without water coordinates.
+engine: amber
+system: trp-cage
+output_subdir: trp-cage/AMBER14_implicit_scan_330K
+
+input_pdb: pdbs/2JOF.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 150000000        # 300 ns at 2 fs; ~8 h at the measured 970 ns/day
+output_freq: 2500           # 5 ps spacing -> 60,000 frames
+report_interval: 5000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: trp-cage-amber14-implicit-scan-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

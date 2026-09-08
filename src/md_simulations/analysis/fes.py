@@ -48,6 +48,23 @@ def make_ca_whole(traj):
     return traj
 
 
+def load_segments(pdb: str | Path, frames: list[str | Path], stride: int = 1) -> list:
+    """Load trajectory files as separate segments, one per file.
+
+    Keeping the files apart matters wherever consecutive frames are assumed to be
+    consecutive in *time*: independent replicas concatenated into one series would
+    contribute a spurious jump at every seam (a fake transition when counting basin
+    crossings, a bogus lagged pair when fitting TICA).
+
+    :param pdb: Path to a PDB providing the topology.
+    :param frames: One or more trajectory files (any mdtraj-readable format).
+    :param stride: Keep every ``stride``-th frame.
+    :return: One ``mdtraj.Trajectory`` per input file, in order."""
+    import mdtraj as md
+
+    return [md.load(str(f), top=str(pdb), stride=stride) for f in frames]
+
+
 def load_trajectory(pdb: str | Path, frames: list[str | Path], stride: int = 1):
     """Load one or more trajectory files against a PDB topology.
 
@@ -57,8 +74,38 @@ def load_trajectory(pdb: str | Path, frames: list[str | Path], stride: int = 1):
     :return: A single concatenated ``mdtraj.Trajectory``."""
     import mdtraj as md
 
-    parts = [md.load(str(f), top=str(pdb), stride=stride) for f in frames]
+    parts = load_segments(pdb, frames, stride)
     return parts[0] if len(parts) == 1 else md.join(parts)
+
+
+def free_energy_1d(
+    x: np.ndarray,
+    bins: int = 90,
+    sigma: float = 2.0,
+    f_max: float = 7.0,
+    x_range: tuple[float, float] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Smoothed 1-D free energy ``-kT ln p`` (kT = 1) on a histogram grid.
+
+    :param x: The coordinate.
+    :param bins: Number of histogram bins.
+    :param sigma: Gaussian smoothing width in bins.
+    :param f_max: Free-energy ceiling; higher values are set to NaN. Pass ``np.inf``
+        to keep the whole surface, which basin location needs — a rarely visited
+        well can sit far above any plotting ceiling.
+    :param x_range: Optional ``(min, max)`` histogram span; defaults to the data extent.
+    :return: ``(centres, F)``, both of shape ``(bins,)``."""
+    from scipy.ndimage import gaussian_filter
+
+    H, edges = np.histogram(x, bins=bins, range=x_range)
+    p = gaussian_filter(H.astype(float), sigma)
+    p /= p.sum()
+    F = np.full(p.shape, np.inf)
+    np.log(p, out=F, where=p > 0)
+    np.negative(F, out=F, where=p > 0)
+    F -= F[np.isfinite(F)].min()
+    F[F > f_max] = np.nan
+    return 0.5 * (edges[:-1] + edges[1:]), F
 
 
 def free_energy_2d(
@@ -87,7 +134,9 @@ def free_energy_2d(
     H, xe, ye = np.histogram2d(x, y, bins=bins, range=hist_range)
     p = gaussian_filter(H, sigma)
     p /= p.sum()
-    F = np.where(p > 0, -np.log(p), np.inf)
+    F = np.full(p.shape, np.inf)
+    np.log(p, out=F, where=p > 0)
+    np.negative(F, out=F, where=p > 0)
     F -= F[np.isfinite(F)].min()
     F[F > f_max] = np.nan
     return 0.5 * (xe[:-1] + xe[1:]), 0.5 * (ye[:-1] + ye[1:]), F

@@ -1,0 +1,114 @@
+# Fine-tune the transferable CGSchNet model on trp-cage at 330 K.
+#
+# Run with mlcg's own training driver:
+#
+#   mlcg-train_h5 fit --config configs/training/trpcage-cgschnet-finetune-330K.yaml
+#
+# Target is `cg_delta_forces`: SchNet is the only parametric term in the checkpoint (324,480
+# parameters; all 51 analytic priors are buffers), so it learns the residual the priors get
+# wrong and the priors are added back afterwards with `mlcg-combine_model`. On this dataset
+# the priors already explain ~82% of the force variance.
+#
+# The PMF being learned is the 330 K one. It is only valid for simulation and evaluation at
+# 330 K: the CG PMF is a free energy, F(R;T) = U(R) - T S(R), whose mapping entropy S(R) is
+# strongly R-dependent for a folding transition, so the same weights at another temperature
+# describe no well-defined ensemble.
+#
+# Coverage caveat, recorded because it bounds what this model can be trusted for: the
+# training set is the 330 K Boltzmann ensemble, hence ~90% folded. Against the transferable
+# model's own ensemble, CG Rg 0.60-0.65 nm is covered at 0.9% versus 22.8%, and Rg > 0.85 nm
+# at 0.3% versus 4.3%. Force matching is pointwise-unbiased wherever it has data, so the fit
+# is sound where the data is - but the delta force is unconstrained in those two bands and
+# the model extrapolates there. Uniform coverage would need umbrella sampling, not more MD.
+
+seed_everything: 42
+
+trainer:
+  # ~39 min/epoch at the measured ~170 frames/s over 420,000 training frames, so 10 epochs
+  # is ~6.5 h. Force matching gains more from distinct frames (each carries independent
+  # instantaneous force noise) than from re-reading the same ones, so the budget goes to
+  # keeping every frame rather than to more epochs.
+  max_epochs: 10
+  accelerator: gpu
+  devices: 1
+  precision: 32
+  default_root_dir: data/models/cgschnet/finetune_330K
+  gradient_clip_val: 10.0
+  # Batch 16 in the partitions x 8 here = an effective batch of 128.
+  accumulate_grad_batches: 8
+  log_every_n_steps: 100
+  enable_progress_bar: true
+  # Must be a list, and every entry needs an init_args block: mlcg's CLI enumerates both
+  # `logger` and `callbacks` to substitute the literal "default_root_dir" (-> the root dir
+  # itself for save_dir, -> <root>/ckpt for a callback dirpath).
+  logger:
+    - class_path: pytorch_lightning.loggers.CSVLogger
+      init_args:
+        save_dir: default_root_dir
+        name: csv
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        dirpath: default_root_dir
+        filename: "finetune-{epoch:03d}-{validation_loss:.4f}"
+        monitor: validation_loss
+        mode: min
+        save_top_k: 3
+        save_last: true
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: validation_loss
+        mode: min
+        patience: 3
+        min_delta: 0.0
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: epoch
+
+# The CLI fixes model_class=PLModel and datamodule_class=H5DataModule, so these sections
+# carry those classes' arguments directly - a class_path/init_args wrapper is rejected.
+model:
+  model:
+    # Starts from the pretrained SchNet term rather than a fresh one - that is what makes
+    # this a fine-tune. Returns the checkpoint's own GradientsOut module, so state-dict keys
+    # stay in the layout `mlcg-combine_model` expects.
+    class_path: md_simulations.prep.cgschnet_finetune.PretrainedSchNet
+    init_args:
+      model_file: data/models/cgschnet/transferable_model_and_prior.reexport.pt
+      device: cpu
+  # PLModel wants an mlcg Loss container, which holds a list of the actual loss terms;
+  # ForceMSE on its own is not a Loss subclass and is rejected.
+  loss:
+    class_path: mlcg.nn.losses.Loss
+    init_args:
+      losses:
+        - class_path: mlcg.nn.losses.ForceMSE
+          init_args:
+            force_kwd: forces
+
+data:
+  h5_file_path: data/trp-cage/fm_330K/trpcage_bysegment.h5
+  # Passed as paths, not inline mappings: partition_options/loading_options are typed
+  # Union[Mapping, str], and an inline mapping makes jsonargparse expand every nested key
+  # into a CLI option and reject it. A str is loaded as YAML by the data module.
+  partition_options: configs/training/trpcage-partitions-330K.yaml
+  loading_options: configs/training/trpcage-loading-330K.yaml
+
+# Fine-tuning, so the learning rate is well below a from-scratch run: the starting weights
+# are already a good force field for this system and large steps would discard them.
+optimizer:
+  class_path: torch.optim.Adam
+  init_args:
+    lr: 1.0e-4
+    weight_decay: 0.0
+
+# pytorch_lightning.cli.ReduceLROnPlateau, not the torch one: Lightning needs a scheduler
+# that carries the metric to watch, and the plain torch class has nowhere to put it.
+lr_scheduler:
+  class_path: pytorch_lightning.cli.ReduceLROnPlateau
+  init_args:
+    monitor: validation_loss
+    mode: min
+    factor: 0.5
+    patience: 2
+    min_lr: 1.0e-7

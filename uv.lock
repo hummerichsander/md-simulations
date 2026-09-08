@@ -1108,7 +1108,8 @@ name = "h5py"
 version = "3.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/33/acd0ce6863b6c0d7735007df01815403f5589a21ff8c2e1ee2587a38f548/h5py-3.16.0.tar.gz", hash = "sha256:a0dbaad796840ccaa67a4c144a0d0c8080073c34c76d5a6941d6818678ef2738", size = 446526, upload-time = "2026-03-06T13:49:08.07Z" }
 wheels = [
@@ -1986,6 +1987,17 @@ awsem = [
 cgschnet = [
     { name = "mlcg", extra = ["cu130"], marker = "python_full_version >= '3.12'" },
 ]
+cgschnet-dataset = [
+    { name = "ase" },
+    { name = "h5py" },
+    { name = "mlcg", extra = ["cu130"], marker = "python_full_version >= '3.12'" },
+    { name = "torch" },
+]
+cgschnet-potentials = [
+    { name = "ase" },
+    { name = "mlcg", extra = ["cu130"], marker = "python_full_version >= '3.12'" },
+    { name = "torch" },
+]
 martini = [
     { name = "insane" },
     { name = "vermouth" },
@@ -2011,11 +2023,15 @@ dev = [
 requires-dist = [
     { name = "ase", marker = "extra == 'torch-potentials'", specifier = ">=3.22" },
     { name = "deeptime", marker = "extra == 'analysis'", specifier = ">=0.4.4" },
+    { name = "h5py", marker = "extra == 'cgschnet-dataset'", specifier = ">=3.10" },
     { name = "insane", marker = "extra == 'martini'", specifier = ">=1.2.0" },
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8" },
     { name = "md-simulations", extras = ["awsem", "martini", "gromacs", "cgschnet", "viz", "analysis", "torch-potentials"], marker = "extra == 'all'" },
+    { name = "md-simulations", extras = ["cgschnet-potentials"], marker = "extra == 'cgschnet-dataset'" },
+    { name = "md-simulations", extras = ["torch-potentials"], marker = "extra == 'cgschnet-potentials'" },
     { name = "mdtraj", specifier = ">=1.10.3" },
     { name = "mlcg", extras = ["cu130"], marker = "python_full_version >= '3.12' and extra == 'cgschnet'", git = "https://github.com/ClementiGroup/mlcg.git" },
+    { name = "mlcg", extras = ["cu130"], marker = "python_full_version >= '3.12' and extra == 'cgschnet-potentials'", git = "https://github.com/ClementiGroup/mlcg.git" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openawsem", marker = "extra == 'awsem'" },
     { name = "openmm", specifier = ">=8.4.0.post2" },
@@ -2028,7 +2044,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "vermouth", marker = "extra == 'martini'", specifier = ">=0.15.0" },
 ]
-provides-extras = ["awsem", "martini", "gromacs", "cgschnet", "viz", "analysis", "torch-potentials", "all"]
+provides-extras = ["awsem", "martini", "gromacs", "cgschnet", "viz", "analysis", "torch-potentials", "cgschnet-potentials", "cgschnet-dataset", "all"]
 
 [package.metadata.requires-dev]
 dev = [

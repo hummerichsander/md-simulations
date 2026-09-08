@@ -1,0 +1,48 @@
+# Train/validation split for the 330 K trp-cage fine-tune, referenced by path from
+# trpcage-cgschnet-finetune-330K.yaml. It lives in its own file because
+# H5DataModule.partition_options is typed Union[Mapping, str]: passing the mapping inline
+# makes jsonargparse expand every nested key into a CLI option and reject it, while a str is
+# loaded as YAML by the data module itself.
+#
+# The split is by whole trajectory, not by frame. Frames are 5 ps apart and the integrated
+# autocorrelation time is ~10 ns, so a random frame split would put near-duplicates on both
+# sides and report a validation loss that merely echoes the training loss.
+#
+# `equil` is the unseeded 300 ns run and is held out. It is the only segment that is a true
+# 330 K Boltzmann ensemble, which makes it the right thing to validate against, and it holds
+# just 7.7% of the dataset's unfolded frames - so holding it out costs almost none of the
+# scarce unfolded data. r00-r07 (r05 excluded upstream) are the seeded replicas.
+
+train:
+  metasets:
+    trpcage:
+      molecules: [r00, r01, r02, r03, r04, r06, r07]
+      stride: 1
+  # Key is "batch_sizes" (plural): the docstring in h5_dataset.py says "batch_size",
+  # but _create_partitions indexes part_info["batch_sizes"] and KeyErrors otherwise.
+  #
+  # 16, not 128: the 15 A radius graph on a compact 97-bead protein is nearly all-to-all
+  # (~9k edges per frame) and force matching needs grad-of-grad, so activations scale steeply.
+  # 16 is the largest that fits the ~5 GB free on this 8 GB card; accumulate_grad_batches
+  # restores an effective batch of 128.
+  batch_sizes:
+    trpcage: 16
+  subsample_random_seed: 42
+
+val:
+  metasets:
+    trpcage:
+      # Strided: 12,000 frames is plenty for a stable validation number and keeps the
+      # per-epoch validation cost small next to 420,000 training frames.
+      molecules: [equil]
+      stride: 5
+  # Key is "batch_sizes" (plural): the docstring in h5_dataset.py says "batch_size",
+  # but _create_partitions indexes part_info["batch_sizes"] and KeyErrors otherwise.
+  #
+  # 16, not 128: the 15 A radius graph on a compact 97-bead protein is nearly all-to-all
+  # (~9k edges per frame) and force matching needs grad-of-grad, so activations scale steeply.
+  # 16 is the largest that fits the ~5 GB free on this 8 GB card; accumulate_grad_batches
+  # restores an effective batch of 128.
+  batch_sizes:
+    trpcage: 16
+  subsample_random_seed: 42

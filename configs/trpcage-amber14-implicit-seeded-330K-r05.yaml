@@ -1,0 +1,42 @@
+# Trp-cage (2JOF), all-atom AMBER14 + GBn2 implicit solvent, 330 K, seeded replica r05.
+# Seed: 390 K unfolded, Q6 0.120, Rg 0.876, nonnat 0.085
+#
+# 330 K was chosen over 360 K on structural grounds: the 360 K unfolded ensemble carries
+# 0.68 non-native contacts per native contact (max 2.28) against 0.41 at 330 K, i.e. it is
+# collapsed and misregistered rather than unfolded. The cost is that 330 K reaches the
+# unfolded basin in only one 26 ns episode (237-263 ns) out of 300 ns, so this wave seeds
+# independent runs across the folding coordinate to build an unfolded ensemble that a single
+# trajectory cannot supply. Runs r05-r07 import expanded 390 K structures (screened to
+# non-native <= 0.45, so not the 360 K-type state); every frame they produce is still 330 K
+# dynamics and therefore a valid sample of the 330 K mean force.
+#
+# These runs are for the force-matching training set only. Basin populations and the melting
+# curve stay sourced from the unseeded AMBER14_implicit_scan_330K run, because a seeded
+# trajectory starts off-equilibrium by construction and its basin frequencies are not
+# Boltzmann.
+engine: amber
+system: trp-cage
+output_subdir: trp-cage/AMBER14_implicit_seeded_330K_r05
+
+input_pdb: pdbs/2JOF-390Kunf-seed00.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 150000000        # 300 ns at 2 fs; ~7.4 h at the measured 970 ns/day
+output_freq: 2500           # 5 ps spacing -> 60,000 frames
+report_interval: 5000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: trp-cage-amber14-implicit-seeded-330K-r05
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

@@ -64,6 +64,15 @@ cgschnet-potentials = [
     "md-simulations[torch-potentials]",
     "mlcg[cu130]; python_full_version >= '3.12'",
 ]
+# Building a CGSchNet force-matching dataset (md_simulations.prep.cgschnet_dataset):
+# aggforce fits the AA->CG force map, h5py writes the dataset mlcg trains from, and
+# the prior-force subtraction needs the differentiable CG potential. aggforce and
+# h5py both arrive with mlcg today, but this extra states the dependency rather than
+# relying on that.
+cgschnet-dataset = [
+    "md-simulations[cgschnet-potentials]",
+    "h5py>=3.10",
+]
 # Everything at once. NOTE: `all` includes `cgschnet`, so it inherits the heavy
 # CUDA-13 torch stack and needs the [tool.uv] cu130 index setup below (and a
 # CUDA-13 host, or `--torch-backend` override) -- same constraint the standalone
@@ -86,8 +95,11 @@ md-sim-umbrella = "md_simulations.sampling.umbrella:main"
 md-sim-cgschnet-map = "md_simulations.prep.cgschnet_map:main"
 md-sim-cgschnet-embeddings = "md_simulations.prep.cgschnet_embeddings:main"
 md-sim-cgschnet-reexport = "md_simulations.prep.cgschnet_reexport:main"
+md-sim-cgschnet-dataset = "md_simulations.prep.cgschnet_dataset:main"
+md-sim-cgschnet-finetune = "md_simulations.prep.cgschnet_finetune:main"
 md-sim-tica = "md_simulations.analysis.tica:main"
 md-sim-cvs = "md_simulations.analysis.cvs:main"
+md-sim-basins = "md_simulations.analysis.basins:main"
 
 [build-system]
 requires = ["hatchling"]

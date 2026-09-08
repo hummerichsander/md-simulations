@@ -18,8 +18,9 @@ from pathlib import Path
 import numpy as np
 
 from md_simulations.analysis.fes import (
+    free_energy_1d,
     free_energy_2d,
-    load_trajectory,
+    load_segments,
     make_ca_whole,
 )
 
@@ -97,10 +98,17 @@ def compute_features(
     return np.concatenate(blocks, axis=1)
 
 
-def fit_tica(features: np.ndarray, lagtime: int, dim: int, scaling: str | None):
-    """Fit a TICA model to feature trajectories.
+def fit_tica(
+    features: np.ndarray | list[np.ndarray], lagtime: int, dim: int, scaling: str | None
+):
+    """Fit a TICA model to one or more feature trajectories.
 
-    :param features: Array of shape ``(n_frames, n_features)``.
+    Pass a list to fit across independent segments (separate runs or replicas): deeptime
+    forms lagged pairs within each segment only, so no pair ever straddles two
+    trajectories. Splicing them into one array instead would invent ``lagtime``
+    worth of bogus correlations at every seam.
+
+    :param features: Array of shape ``(n_frames, n_features)``, or a list of such arrays.
     :param lagtime: TICA lag time in frames.
     :param dim: Number of independent components to keep.
     :param scaling: deeptime scaling mode (``"kinetic_map"``, ``"commute_map"``
@@ -114,8 +122,9 @@ def fit_tica(features: np.ndarray, lagtime: int, dim: int, scaling: str | None):
             "Fitting a TICA model requires deeptime. Install the analysis extra: "
             "`uv sync --extra analysis`."
         ) from e
+    blocks = features if isinstance(features, list) else [features]
     tica = TICA(lagtime=lagtime, dim=dim, scaling=scaling)
-    return tica.fit([features]).fetch_model()
+    return tica.fit(blocks).fetch_model()
 
 
 def save_tica_model(model, path: str | Path) -> None:
@@ -195,10 +204,8 @@ def plot_free_energy(
     else:
         fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
         for proj, label in zip(projections, labels):
-            H, edges = np.histogram(proj[:, 0], bins=90, density=True, range=xlim)
-            F = np.where(H > 0, -np.log(H), np.nan)
-            F -= np.nanmin(F)
-            ax.plot(0.5 * (edges[:-1] + edges[1:]), F, label=label)
+            centres, F = free_energy_1d(proj[:, 0], 90, 2.0, f_max, x_range=xlim)
+            ax.plot(centres, F, label=label)
         ax.set_xlabel("TIC 1")
         ax.set_ylabel(r"Free energy $[k_{\mathrm{B}}T]$")
         if xlim:
@@ -293,9 +300,14 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    traj = load_trajectory(args.pdb, args.frames, args.stride)
-    features = compute_features(traj, args.features, args.exclude_neighbors)
-    print(f"Featurised {features.shape[0]} frames × {features.shape[1]} features.")
+    # Featurise per file: fitting must not form lagged pairs across independent runs.
+    segments = load_segments(args.pdb, args.frames, args.stride)
+    blocks = [compute_features(s, args.features, args.exclude_neighbors) for s in segments]
+    features = blocks[0] if len(blocks) == 1 else np.concatenate(blocks, axis=0)
+    print(
+        f"Featurised {features.shape[0]} frames × {features.shape[1]} features "
+        f"in {len(blocks)} segment(s)."
+    )
 
     projections: list[np.ndarray] = []
     labels: list[str | None] = []
@@ -307,19 +319,20 @@ def main() -> None:
         print(f"Projected via preexisting model → {projection.shape[1]} TICs.")
         projections, labels = [projection], [None]
     else:
-        n_frames = features.shape[0]
+        # A lag must fit inside the shortest segment, not just the pooled length.
+        n_frames = min(b.shape[0] for b in blocks)
         lags = [lag for lag in args.lags if lag < n_frames]
         for lag in args.lags:
             if lag >= n_frames:
-                print(f"Skipping lag={lag}: trajectory has only {n_frames} frames.")
+                print(f"Skipping lag={lag}: shortest segment has only {n_frames} frames.")
         if not lags:
             parser.error(
-                f"No lag is smaller than the {n_frames} available frames; "
+                f"No lag is smaller than the {n_frames} frames of the shortest segment; "
                 "lower --lags or --stride."
             )
         multi = len(lags) > 1
         for lag in lags:
-            model = fit_tica(features, lag, args.dim, scaling)
+            model = fit_tica(blocks, lag, args.dim, scaling)
             projection = model.transform(features)
             prefix = f"{args.prefix}_lag{lag}" if multi else args.prefix
             save_tica_model(model, out_dir / f"{prefix}_model.pkl")

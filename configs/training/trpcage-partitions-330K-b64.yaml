@@ -1,0 +1,38 @@
+# Train/validation split for the 330 K trp-cage fine-tune at batch 64 (A30, 24 GB).
+#
+# Identical split to `trpcage-partitions-330K.yaml`; only the batch size differs, so the two
+# files stay in step if the split ever changes. See that file for why the split is by whole
+# trajectory (frames are 5 ps apart against a ~10 ns correlation time, so a random frame
+# split leaks almost completely) and why `equil` is the run held out.
+#
+# 64, not the 16 the first run used on an 8 GB card. Peak allocation for this network is
+# linear in the batch and was measured at 3.13 / 4.66 / 6.20 GiB for batches of 16 / 24 / 32,
+# i.e. 196 MB per sample - the 15 A radius graph on 97 beads is nearly all-to-all at ~9k
+# edges, and force matching differentiates through the energy gradient. 64 therefore lands at
+# ~12.3 GiB, comfortably inside 24 GB: an OOM twelve hours into a job costs far more than the
+# throughput a tighter fit would buy. `accumulate_grad_batches: 4` in the trainer config lifts
+# the effective batch to 256.
+
+train:
+  metasets:
+    trpcage:
+      molecules: [r00, r01, r02, r03, r04, r06, r07]
+      stride: 1
+  # Key is "batch_sizes" (plural): the docstring in h5_dataset.py says "batch_size",
+  # but _create_partitions indexes part_info["batch_sizes"] and KeyErrors otherwise.
+  batch_sizes:
+    trpcage: 64
+  subsample_random_seed: 42
+
+val:
+  metasets:
+    trpcage:
+      # Strided: 12,000 frames is plenty for a stable validation number and keeps the
+      # per-epoch validation cost small next to 420,000 training frames.
+      molecules: [equil]
+      stride: 5
+  # Validation needs the same memory as training: the force prediction is a gradient, so
+  # `torch.no_grad()` does not apply and the activations are held either way.
+  batch_sizes:
+    trpcage: 64
+  subsample_random_seed: 42

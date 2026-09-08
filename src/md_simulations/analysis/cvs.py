@@ -23,7 +23,7 @@ import numpy as np
 from md_simulations.analysis.fes import (
     drop_spurious_box,
     free_energy_2d,
-    load_trajectory,
+    load_segments,
 )
 
 
@@ -43,6 +43,33 @@ def rmsd_to_native(
     if len(idx) == 0:
         raise ValueError(f"Selection '{selection}' matched no atoms for RMSD.")
     return md.rmsd(traj, native, atom_indices=idx)
+
+
+def contact_pairs(native, *, min_seq_sep: int = 3) -> tuple[np.ndarray, np.ndarray]:
+    """Heavy-atom pairs separated by at least ``min_seq_sep`` residues, with their reference distances.
+
+    :param native: Single-frame reference ``mdtraj.Trajectory``.
+    :param min_seq_sep: Minimum residue-index separation for a pair.
+    :return: ``(pairs, r0)`` of shapes ``(n_pairs, 2)`` and ``(n_pairs,)``, ``r0`` in nm.
+    :raises ValueError: If no pair satisfies the separation requirement."""
+    import mdtraj as md
+
+    heavy = native.top.select_atom_indices("heavy")
+    resid = np.array([native.top.atom(i).residue.index for i in heavy])
+    pairs = np.array(
+        [
+            (heavy[a], heavy[b])
+            for a in range(len(heavy))
+            for b in range(a + 1, len(heavy))
+            if abs(resid[a] - resid[b]) >= min_seq_sep
+        ]
+    )
+    if len(pairs) == 0:
+        raise ValueError(
+            f"No heavy-atom pairs with residue separation ≥ {min_seq_sep}; "
+            "lower --q-min-seq-sep."
+        )
+    return pairs, md.compute_distances(native, pairs, periodic=False)[0]
 
 
 def fraction_native_contacts(
@@ -72,23 +99,9 @@ def fraction_native_contacts(
     :return: Array of shape ``(n_frames,)`` of ``Q`` in ``[0, 1]``.
     :raises ValueError: If the reference has no native contacts."""
     import mdtraj as md
+    from scipy.special import expit
 
-    heavy = native.top.select_atom_indices("heavy")
-    resid = np.array([native.top.atom(i).residue.index for i in heavy])
-    pairs = np.array(
-        [
-            (heavy[a], heavy[b])
-            for a in range(len(heavy))
-            for b in range(a + 1, len(heavy))
-            if abs(resid[a] - resid[b]) >= min_seq_sep
-        ]
-    )
-    if len(pairs) == 0:
-        raise ValueError(
-            f"No heavy-atom pairs with residue separation ≥ {min_seq_sep}; "
-            "lower --q-min-seq-sep."
-        )
-    r0 = md.compute_distances(native, pairs, periodic=False)[0]
+    pairs, r0 = contact_pairs(native, min_seq_sep=min_seq_sep)
     contacts = pairs[r0 < native_cutoff]
     if len(contacts) == 0:
         raise ValueError(
@@ -97,8 +110,59 @@ def fraction_native_contacts(
         )
     r = md.compute_distances(traj, contacts, periodic=periodic)
     r0_contacts = r0[r0 < native_cutoff]
-    q = 1.0 / (1.0 + np.exp(beta * (r - lam * r0_contacts)))
+    # expit rather than 1/(1+exp(x)): the exponent overflows for well-broken contacts
+    q = expit(-beta * (r - lam * r0_contacts))
     return q.mean(axis=1)
+
+
+def fraction_nonnative_contacts(
+    traj,
+    native,
+    *,
+    native_cutoff: float = 0.45,
+    min_seq_sep: int = 3,
+    periodic: bool = False,
+    chunk: int = 2000,
+) -> np.ndarray:
+    """Non-native contacts formed, normalised by the native contact count.
+
+    Counts pairs that are *not* in contact in the reference (``r0 >= native_cutoff``)
+    but come within ``native_cutoff`` in a frame. Dividing by the number of native
+    contacts puts it on the same scale as ``Q``, so a value near 1 means the structure
+    has formed as many wrong contacts as it has right ones. This separates a genuinely
+    expanded unfolded state from a collapsed, misregistered one — two things ``Q`` and
+    the radius of gyration both fail to distinguish on their own.
+
+    :param traj: An ``mdtraj.Trajectory``.
+    :param native: Single-frame reference ``mdtraj.Trajectory`` (matching topology).
+    :param native_cutoff: Contact distance cutoff in nm, for both definitions.
+    :param min_seq_sep: Minimum residue-index separation for a pair.
+    :param periodic: Apply the minimum-image convention to distances.
+    :param chunk: Frames per distance evaluation. Non-native pairs outnumber native ones
+        by ~30x, so evaluating a long trajectory in one call would allocate gigabytes.
+    :return: Array of shape ``(n_frames,)``.
+    :raises ValueError: If the reference has no native or no non-native pairs."""
+    import mdtraj as md
+
+    pairs, r0 = contact_pairs(native, min_seq_sep=min_seq_sep)
+    n_native = int((r0 < native_cutoff).sum())
+    if n_native == 0:
+        raise ValueError(
+            f"No native contacts within {native_cutoff} nm in the reference; "
+            "raise --q-cutoff or check the native structure."
+        )
+    nonnative = pairs[r0 >= native_cutoff]
+    if len(nonnative) == 0:
+        raise ValueError(
+            f"Every pair is a native contact at {native_cutoff} nm; "
+            "lower --q-cutoff for a meaningful non-native count."
+        )
+    counts = np.empty(traj.n_frames, dtype=np.int64)
+    for start in range(0, traj.n_frames, chunk):
+        block = traj[start : start + chunk]
+        r = md.compute_distances(block, nonnative, periodic=periodic)
+        counts[start : start + len(block)] = (r < native_cutoff).sum(axis=1)
+    return counts / n_native
 
 
 def radius_of_gyration(traj, native=None, *, periodic: bool = False) -> np.ndarray:
@@ -144,6 +208,11 @@ CVS: dict[str, CV] = {
     "native_contacts": CV(
         fraction_native_contacts, r"Fraction of native contacts $Q$", needs_native=True
     ),
+    "nonnative_contacts": CV(
+        fraction_nonnative_contacts,
+        r"Non-native contacts / $N_{\mathrm{native}}$",
+        needs_native=True,
+    ),
     "rg": CV(radius_of_gyration, "Radius of gyration [nm]", needs_native=False),
     "end_to_end": CV(end_to_end_distance, "End-to-end distance [nm]", needs_native=False),
 }
@@ -177,8 +246,8 @@ def compute_cvs(
         if spec.needs_native and native is None:
             raise ValueError(f"CV '{name}' needs a native structure (--native).")
         match name:
-            case "native_contacts":
-                out[name] = fraction_native_contacts(
+            case "native_contacts" | "nonnative_contacts":
+                out[name] = spec.func(
                     traj,
                     native,
                     native_cutoff=q_native_cutoff,
@@ -278,6 +347,13 @@ def main() -> None:
     )
     parser.add_argument("--stride", type=int, default=1, help="Frame stride on load.")
     parser.add_argument(
+        "--dt-ps",
+        type=float,
+        default=1.0,
+        help="Time between consecutive *saved* trajectory frames in ps, before --stride "
+        "(default 1.0). Recorded in the npz so downstream kinetics are in physical units.",
+    )
+    parser.add_argument(
         "--q-cutoff",
         type=float,
         default=0.45,
@@ -309,14 +385,16 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    traj = load_trajectory(args.pdb, args.frames, args.stride)
+    import mdtraj as md
+
+    segments = load_segments(args.pdb, args.frames, args.stride)
+    segment_lengths = np.array([s.n_frames for s in segments], dtype=np.int64)
+    traj = segments[0] if len(segments) == 1 else md.join(segments)
     drop_spurious_box(traj)
     periodic = traj.unitcell_lengths is not None
 
     native = None
     if any(CVS[name].needs_native for name in args.cvs):
-        import mdtraj as md
-
         native = md.load(str(args.native or args.pdb), top=str(args.pdb))[0]
 
     cvs = compute_cvs(
@@ -329,7 +407,18 @@ def main() -> None:
     )
     print(f"Computed {len(cvs)} CV(s) over {traj.n_frames} frames: {', '.join(cvs)}.")
 
-    np.savez(out_dir / f"{args.prefix}_cvs.npz", **cvs)
+    # Metadata travels with the CVs: without dt_ps and stride any downstream kinetics
+    # are in unknown units, and without segment_lengths a multi-file load looks like
+    # one continuous trajectory.
+    np.savez(
+        out_dir / f"{args.prefix}_cvs.npz",
+        **cvs,
+        stride=np.int64(args.stride),
+        dt_ps=np.float64(args.dt_ps * args.stride),
+        segment_lengths=segment_lengths,
+        q_min_seq_sep=np.int64(args.q_min_seq_sep),
+        q_native_cutoff=np.float64(args.q_cutoff),
+    )
 
     if args.plot:
         fig_file = out_dir / f"{args.prefix}_fes.pdf"
