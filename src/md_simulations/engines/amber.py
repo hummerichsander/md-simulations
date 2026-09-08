@@ -56,9 +56,7 @@ class AmberEngine(OpenMMEngine):
         self.logger.info(f"Constraints: {cfg.constraints}")
 
         if cfg.implicit_solvent:
-            self.logger.info(
-                f"Implicit solvent (GB): no water box, salt = {cfg.salt_conc} mol/L."
-            )
+            self.logger.info(f"Implicit solvent (GB): no water box, salt = {cfg.salt_conc} mol/L.")
             kwargs = dict(
                 nonbondedMethod=app.CutoffNonPeriodic,
                 nonbondedCutoff=cfg.nonbonded_cutoff * unit.nanometer,
@@ -72,7 +70,9 @@ class AmberEngine(OpenMMEngine):
 
         self.logger.info(f"Adding solvent ({cfg.water_model}) with {cfg.padding} nm padding...")
         modeller.addSolvent(
-            forcefield, model=cfg.water_model, padding=cfg.padding * unit.nanometer  # type: ignore[arg-type]
+            forcefield,
+            model=cfg.water_model,
+            padding=cfg.padding * unit.nanometer,  # type: ignore[arg-type]
         )
 
         self.logger.info("Creating OpenMM system...")

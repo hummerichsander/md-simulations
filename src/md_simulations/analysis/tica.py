@@ -76,9 +76,7 @@ FEATURES = {
 }
 
 
-def compute_features(
-    traj, features: list[str], exclude_neighbors: int = 2
-) -> np.ndarray:
+def compute_features(traj, features: list[str], exclude_neighbors: int = 2) -> np.ndarray:
     """Compute and concatenate the requested feature sets for a trajectory.
 
     :param traj: An ``mdtraj.Trajectory``.
@@ -246,9 +244,7 @@ def main() -> None:
         help="TICA lag time(s) in frames (fitting). Passing several fits one model "
         "per lag and writes a multi-panel FES comparison.",
     )
-    parser.add_argument(
-        "--dim", type=int, default=2, help="Number of independent components."
-    )
+    parser.add_argument("--dim", type=int, default=2, help="Number of independent components.")
     parser.add_argument(
         "--scaling",
         default="kinetic_map",
@@ -261,9 +257,7 @@ def main() -> None:
         help="Preexisting pickled TICA model (.pkl); project via its .transform "
         "instead of fitting.",
     )
-    parser.add_argument(
-        "-o", "--out-dir", default=".", help="Directory for outputs (default cwd)."
-    )
+    parser.add_argument("-o", "--out-dir", default=".", help="Directory for outputs (default cwd).")
     parser.add_argument(
         "--prefix", default="tica", help="Filename prefix for outputs (default 'tica')."
     )
@@ -314,8 +308,7 @@ def main() -> None:
                 print(f"Skipping lag={lag}: trajectory has only {n_frames} frames.")
         if not lags:
             parser.error(
-                f"No lag is smaller than the {n_frames} available frames; "
-                "lower --lags or --stride."
+                f"No lag is smaller than the {n_frames} available frames; lower --lags or --stride."
             )
         multi = len(lags) > 1
         for lag in lags:

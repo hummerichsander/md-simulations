@@ -35,7 +35,9 @@ class PureLiquidEngine(OpenMMEngine):
             ewaldErrorTolerance=0.0005,
         )
 
-        self.logger.info(f"Adding Monte Carlo barostat ({cfg.pressure} bar, {cfg.temperature} K)...")
+        self.logger.info(
+            f"Adding Monte Carlo barostat ({cfg.pressure} bar, {cfg.temperature} K)..."
+        )
         system.addForce(
             openmm.MonteCarloBarostat(
                 cfg.pressure * unit.bar,  # type: ignore[arg-type]

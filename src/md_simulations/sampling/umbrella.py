@@ -156,9 +156,7 @@ def add_umbrella_potential(
         force = openmm.CustomTorsionForce("0.5 * k * (theta - theta0)^2")
         force.addGlobalParameter("k", k)
         force.addPerTorsionParameter("theta0")
-        force.addTorsion(
-            int(atoms[0]), int(atoms[1]), int(atoms[2]), int(atoms[3]), [theta0]
-        )
+        force.addTorsion(int(atoms[0]), int(atoms[1]), int(atoms[2]), int(atoms[3]), [theta0])
         system.addForce(force)
 
     logger.info(
@@ -284,7 +282,9 @@ def run_single_umbrella_window(
                             .value_in_unit(unit.kilojoules_per_mole)
                         )
                         if math.isnan(energy_val) or energy_val > 1e6:
-                            logger.warning(f"Energy issue during heating at {window_name}. Skipping.")
+                            logger.warning(
+                                f"Energy issue during heating at {window_name}. Skipping."
+                            )
                             return False
                 integrator.setTemperature(args.temperature * unit.kelvin)
                 remaining_eq_steps = args.num_equilibration_steps - heating_steps
@@ -304,7 +304,9 @@ def run_single_umbrella_window(
                         .value_in_unit(unit.kilojoules_per_mole)
                     )
                     if math.isnan(energy_val) or energy_val > 1e6:
-                        logger.warning(f"Energy issue during equilibration at {window_name}. Skipping.")
+                        logger.warning(
+                            f"Energy issue during equilibration at {window_name}. Skipping."
+                        )
                         return False
             if remainder := remaining_eq_steps % 1000:
                 simulation.step(remainder)
@@ -336,7 +338,9 @@ def run_single_umbrella_window(
                         .value_in_unit(unit.kilojoules_per_mole)
                     )
                     if math.isnan(energy_val):
-                        logger.warning(f"NaN energy during production at {window_name}. Stopping window.")
+                        logger.warning(
+                            f"NaN energy during production at {window_name}. Stopping window."
+                        )
                         return False
         except Exception as e:
             logger.warning(f"Simulation failed at {window_name}: {e}")
@@ -388,9 +392,7 @@ def run_grid_umbrella_sampling(args: argparse.Namespace) -> None:
     for phi_target in phi_values:
         for psi_target in psi_values:
             # Deep-copy the base system per window via XML (round)-trip serialization.
-            system = openmm.XmlSerializer.deserialize(
-                openmm.XmlSerializer.serialize(system_base)
-            )
+            system = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(system_base))
             add_umbrella_potential(
                 system, phi_atoms, psi_atoms, phi_target, psi_target, args.force_constant
             )
@@ -448,7 +450,10 @@ def main() -> None:
         "--num-umbrella-samples", type=int, default=100_000, help="Production MD steps per window."
     )
     parser.add_argument(
-        "--num-equilibration-steps", type=int, default=10_000, help="Equilibration steps per window."
+        "--num-equilibration-steps",
+        type=int,
+        default=10_000,
+        help="Equilibration steps per window.",
     )
     parser.add_argument(
         "--gradual-heating", action="store_true", help="Gradually heat during equilibration."
@@ -457,7 +462,11 @@ def main() -> None:
         "--force-constant", type=float, default=100.0, help="Umbrella force constant (kJ/mol/rad²)."
     )
     parser.add_argument(
-        "--output-freq", "-f", type=int, default=1000, help="Steps between trajectory/dihedral writes."
+        "--output-freq",
+        "-f",
+        type=int,
+        default=1000,
+        help="Steps between trajectory/dihedral writes.",
     )
     parser.add_argument(
         "--forcefield",

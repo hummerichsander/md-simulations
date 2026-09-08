@@ -87,6 +87,4 @@ def save_final_structure(
     :param output_dir: Directory to write the PDB into.
     :param logger: Optional logger for a confirmation message.
     :return: :class:`pathlib.Path` to the written PDB file."""
-    return save_structure(
-        simulation, output_dir / "final_structure.pdb", logger, "final structure"
-    )
+    return save_structure(simulation, output_dir / "final_structure.pdb", logger, "final structure")

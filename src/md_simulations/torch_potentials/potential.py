@@ -72,8 +72,11 @@ class Potential:
             ``None`` defaults to 90 degrees (orthorhombic).
         :return: Scalar energy in kJ/mol for ``(N, 3)`` input, else a ``(F,)``
             tensor of energies, differentiable w.r.t. ``positions``."""
-        lengths = None if unitcell_lengths is None else \
-            unitcell_lengths.detach().cpu().numpy() * NM_TO_ANG  # nm -> A
+        lengths = (
+            None
+            if unitcell_lengths is None
+            else unitcell_lengths.detach().cpu().numpy() * NM_TO_ANG
+        )  # nm -> A
         angles = None if unitcell_angles is None else unitcell_angles.detach().cpu().numpy()
 
         if positions.dim() == 3:

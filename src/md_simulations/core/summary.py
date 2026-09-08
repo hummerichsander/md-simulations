@@ -66,7 +66,10 @@ def _inspect_system(simulation: app.Simulation) -> dict:
     :param simulation: The simulation to introspect.
     :return: Dict of discovered facts (best-effort; missing keys omitted)."""
     system = simulation.system
-    info: dict = {"n_particles": system.getNumParticles(), "n_constraints": system.getNumConstraints()}
+    info: dict = {
+        "n_particles": system.getNumParticles(),
+        "n_constraints": system.getNumConstraints(),
+    }
 
     barostat = None
     nonbonded = None
@@ -149,7 +152,10 @@ def write_simulation_summary(
             ("Water model", None if implicit else getattr(config, "water_model", None)),
             ("Solvent padding", None if implicit else _nm(getattr(config, "padding", None))),
             ("Implicit solvent", "yes (GB)" if implicit else None),
-            ("Salt concentration", f"{config.salt_conc} mol/L" if getattr(config, "salt_conc", 0.0) else None),
+            (
+                "Salt concentration",
+                f"{config.salt_conc} mol/L" if getattr(config, "salt_conc", 0.0) else None,
+            ),
             ("Particles", f"{info['n_particles']:,}"),
             ("Constraints", f"{info['n_constraints']:,}"),
             ("Periodic", "yes" if box else "no"),
@@ -161,19 +167,32 @@ def write_simulation_summary(
             ("Temperature", f"{config.temperature} K"),
             ("Friction", f"{config.friction} ps^-1"),
             ("Timestep", f"{config.timestep * 1000:.4g} fs"),
-            ("Barostat", f"Monte Carlo, {info.get('pressure_bar', getattr(config, 'pressure', '?'))} bar" if ensemble == "NPT" else None),
+            (
+                "Barostat",
+                f"Monte Carlo, {info.get('pressure_bar', getattr(config, 'pressure', '?'))} bar"
+                if ensemble == "NPT"
+                else None,
+            ),
         ],
         "Nonbonded": [
             ("Method", info.get("nonbonded_method")),
             ("Cutoff", _nm(info.get("cutoff_nm"))),
-            ("Switch distance", _nm(getattr(config, "switch_distance", None)) if config.engine == "gromacs_input" else None),
+            (
+                "Switch distance",
+                _nm(getattr(config, "switch_distance", None))
+                if config.engine == "gromacs_input"
+                else None,
+            ),
         ],
         "Production": [
             ("Steps", f"{config.num_steps:,}"),
             ("Simulated time", _fmt_time(total_ns)),
             ("Output interval", f"{config.output_freq:,} steps ({frame_ps:.4g} ps)"),
             ("Trajectory frames", f"{frames:,}"),
-            ("Outputs", "trajectory.dcd, energies.csv, forces.txt, initial_structure.pdb, final_structure.pdb"),
+            (
+                "Outputs",
+                "trajectory.dcd, energies.csv, forces.txt, initial_structure.pdb, final_structure.pdb",
+            ),
         ],
     }
 

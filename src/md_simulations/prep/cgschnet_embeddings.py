@@ -53,9 +53,7 @@ def extract_atom_types(obj) -> np.ndarray:
         for key in _ATOM_TYPE_KEYS:
             if key in obj:
                 return _to_int_array(obj[key])
-        raise KeyError(
-            f"None of {_ATOM_TYPE_KEYS} found in config dict (keys: {list(obj)[:10]})."
-        )
+        raise KeyError(f"None of {_ATOM_TYPE_KEYS} found in config dict (keys: {list(obj)[:10]}).")
     if isinstance(obj, (list, tuple)):
         if not obj:
             raise ValueError("Empty configuration container.")

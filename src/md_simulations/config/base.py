@@ -66,7 +66,9 @@ class AmberConfig(_Common):
 
     engine: Literal["amber"] = "amber"
     input_pdb: str
-    forcefield: list[str] = Field(default_factory=lambda: ["amber14-all.xml", "amber14/tip3pfb.xml"])
+    forcefield: list[str] = Field(
+        default_factory=lambda: ["amber14-all.xml", "amber14/tip3pfb.xml"]
+    )
     ph: float = 7.0
     padding: float = 1.0
     water_model: str = "tip3p"
@@ -86,9 +88,7 @@ class PureLiquidConfig(_Common):
 
     engine: Literal["pure_liquid"] = "pure_liquid"
     input_pdb: str
-    forcefield: list[str] = Field(
-        default_factory=lambda: ["charmm36.xml", "charmm36/water.xml"]
-    )
+    forcefield: list[str] = Field(default_factory=lambda: ["charmm36.xml", "charmm36/water.xml"])
     pressure: float = 1.0
 
 

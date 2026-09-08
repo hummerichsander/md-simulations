@@ -131,8 +131,9 @@ format = "flat"
 [tool.ruff]
 # 100 rather than the default 88, matching how torch_potentials/ was written. The
 # enforced gate is `ruff check`, whose default rule set has no line-length rule, so
-# this only affects `ruff format` -- and the tree has never been format-clean at
-# either width (21 files would change at 88, 15 at 100), so nothing regresses.
+# this only affects `ruff format`. The tree is format-clean at this width as of the
+# reformat commit, so `ruff format --check` is now meaningful -- keep it that way,
+# and do not change the width without reformatting in the same commit.
 line-length = 100
 exclude = [
     "tests",

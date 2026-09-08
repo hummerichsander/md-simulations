@@ -161,5 +161,7 @@ class AwsemEngine(OpenMMEngine):
         for f in force_list:
             oa.system.addForce(f)
 
-        self.logger.info(f"System ready: {oa.system.getNumParticles()} CG beads, {oa.nres} residues")
+        self.logger.info(
+            f"System ready: {oa.system.getNumParticles()} CG beads, {oa.nres} residues"
+        )
         return BuiltSystem(oa.pdb.topology, oa.system, oa.pdb.positions)

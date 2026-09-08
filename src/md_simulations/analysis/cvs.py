@@ -85,8 +85,7 @@ def fraction_native_contacts(
     )
     if len(pairs) == 0:
         raise ValueError(
-            f"No heavy-atom pairs with residue separation ≥ {min_seq_sep}; "
-            "lower --q-min-seq-sep."
+            f"No heavy-atom pairs with residue separation ≥ {min_seq_sep}; lower --q-min-seq-sep."
         )
     r0 = md.compute_distances(native, pairs, periodic=False)[0]
     contacts = pairs[r0 < native_cutoff]
@@ -289,9 +288,7 @@ def main() -> None:
         default=3,
         help="Minimum residue separation for native contacts (default 3).",
     )
-    parser.add_argument(
-        "-o", "--out-dir", default=".", help="Directory for outputs (default cwd)."
-    )
+    parser.add_argument("-o", "--out-dir", default=".", help="Directory for outputs (default cwd).")
     parser.add_argument(
         "--prefix", default="cv", help="Filename prefix for outputs (default 'cv')."
     )
