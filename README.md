@@ -243,8 +243,21 @@ boundary.
   `unitcell_angles` (degrees) alongside the positions; a single `(3,)` broadcasts
   across a batch.
 - **Force groups** — `groups=` (a bitmask or set of indices) restricts the
-  evaluation to a subset of OpenMM force groups, so you can score individual
-  energy terms.
+  evaluation to a subset of OpenMM force groups. Note this is only a *filter*:
+  `forcefield.createSystem` leaves every force in group 0, so on an AMBER system
+  `groups={0}` returns the total, not the bonded term.
+- **Per-term energies** — `build_potential_terms` / `build_potential_terms_from_file`
+  return `{force name: Potential}` instead of one total, assigning each force its own
+  group before the `Context` is built. The parts sum to `build_potential`'s total:
+
+  ```python
+  terms = build_potential_terms_from_file(top, "configs/trpcage-amber14-implicit-300K.yaml")
+  {name: pot(x).item() for name, pot in terms.items()}
+  # {'HarmonicBondForce': 407.0, 'NonbondedForce': -1164.0, 'CustomGBForce': -2553.9, ...}
+  ```
+
+  Each term keeps its own calculator on a shared `Context`, because ASE caches on
+  geometry alone — mutating `groups` on one calculator returns the previous term.
 - **Gradients are first-order only.** The engine is opaque to autograd (`backward`
   reconstructs the gradient from the engine's forces), so there are no Hessians
   and no double-backward.

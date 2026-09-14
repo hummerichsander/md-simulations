@@ -185,3 +185,138 @@ def test_lazy_names_are_public_and_unknown_ones_raise() -> None:
 
     with pytest.raises(AttributeError, match="no attribute 'nope'"):
         tp.nope
+
+
+def _two_force_system() -> tuple[app.Topology, openmm.System]:
+    """The diatomic with a second bond force added, so a per-term split has parts.
+
+    Two ``HarmonicBondForce`` instances exercise the duplicate-name suffixing as well.
+
+    :return: ``(topology, system)`` carrying three forces, all left in group 0."""
+    topology, system = _diatomic_system()
+
+    nb = openmm.NonbondedForce()
+    nb.addParticle(0.0, 0.3, 0.5)  # charge e, sigma nm, epsilon kJ/mol
+    nb.addParticle(0.0, 0.3, 0.5)
+    system.addForce(nb)
+
+    extra = openmm.HarmonicBondForce()
+    extra.addBond(0, 1, 0.20, 1.0e4)
+    system.addForce(extra)
+    return topology, system
+
+
+class _StubTwoForceEngine(OpenMMEngine):
+    """OpenMM engine yielding the three-force ``BuiltSystem``."""
+
+    def build_system(self) -> BuiltSystem:
+        topology, system = _two_force_system()
+        positions = [Vec3(*row) for row in _POS_NM] * unit.nanometer
+        return BuiltSystem(topology, system, positions)
+
+
+def test_build_potential_terms_sum_to_the_total(monkeypatch, tmp_path: Path) -> None:
+    """Per-force potentials are named after their forces and sum to the total.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Pytest temporary directory (used as the data root).
+    :return: None."""
+    import mdtraj as md
+    import torch
+
+    monkeypatch.setattr(
+        build, "build_engine", lambda config, data_root, logger: _StubTwoForceEngine(config, data_root, logger)
+    )
+
+    topology, _ = _two_force_system()
+    top = md.Topology.from_openmm(topology)
+    config = AmberConfig(system="t", output_subdir="t", input_pdb="a.pdb")
+
+    terms = build.build_potential_terms(top, config, data_root=tmp_path)
+    total = build.build_potential(top, config, data_root=tmp_path)
+
+    # repeated force classes are suffixed, and the order follows the system
+    assert list(terms) == ["HarmonicBondForce", "NonbondedForce", "HarmonicBondForce#2"]
+
+    x = torch.tensor(_POS_NM, dtype=torch.float64)
+    parts = {name: pot(x).item() for name, pot in terms.items()}
+
+    assert np.isclose(sum(parts.values()), total(x).item(), atol=1e-6)
+    # a real split, not the same number three times
+    assert not np.isclose(parts["HarmonicBondForce"], total(x).item())
+    assert all(np.isfinite(v) for v in parts.values())
+
+
+def test_build_potential_terms_are_not_stale_between_calls(monkeypatch, tmp_path: Path) -> None:
+    """Each term keeps its own calculator, so evaluating one does not poison the next.
+
+    ASE only recomputes when the geometry changes, so a shared calculator whose
+    ``groups`` were mutated would return the previous term here.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Pytest temporary directory (used as the data root).
+    :return: None."""
+    import mdtraj as md
+    import torch
+
+    monkeypatch.setattr(
+        build, "build_engine", lambda config, data_root, logger: _StubTwoForceEngine(config, data_root, logger)
+    )
+
+    topology, _ = _two_force_system()
+    top = md.Topology.from_openmm(topology)
+    config = AmberConfig(system="t", output_subdir="t", input_pdb="a.pdb")
+    terms = build.build_potential_terms(top, config, data_root=tmp_path)
+
+    x = torch.tensor(_POS_NM, dtype=torch.float64)
+    first = {name: pot(x).item() for name, pot in terms.items()}
+    # same positions, reversed order: a caching bug shows up as an order dependence
+    second = {name: terms[name](x).item() for name in reversed(list(terms))}
+
+    assert first == second
+
+
+def test_build_potential_terms_from_file(monkeypatch, tmp_path: Path, write_yaml) -> None:
+    """``build_potential_terms_from_file`` loads the YAML and binds the topology.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Pytest temporary directory (used as the data root).
+    :param write_yaml: Fixture writing a config dict to a YAML file.
+    :return: None."""
+    import mdtraj as md
+
+    from md_simulations.torch_potentials import Potential
+
+    monkeypatch.setattr(
+        build, "build_engine", lambda config, data_root, logger: _StubTwoForceEngine(config, data_root, logger)
+    )
+
+    path = write_yaml(
+        {"engine": "amber", "system": "t", "output_subdir": "t/run", "input_pdb": "a.pdb"}
+    )
+    topology, _ = _two_force_system()
+    top = md.Topology.from_openmm(topology)
+
+    terms = build.build_potential_terms_from_file(top, path, data_root=tmp_path)
+    assert len(terms) == 3
+    assert all(isinstance(pot, Potential) for pot in terms.values())
+    assert all(pot.n_atoms == top.n_atoms for pot in terms.values())
+
+
+def test_build_potential_terms_unsupported_engine(monkeypatch, tmp_path: Path) -> None:
+    """A non-OpenMM engine raises the same ``NotImplementedError`` as the total does.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Pytest temporary directory (used as the data root).
+    :return: None."""
+    import mdtraj as md
+
+    monkeypatch.setattr(
+        build, "build_engine", lambda config, data_root, logger: _StubEngine(config, data_root, logger)
+    )
+    topology, _ = _diatomic_system()
+    config = GromacsNativeConfig(
+        system="t", output_subdir="t", input_gro="a.gro", top="a.top", mdp="m.mdp"
+    )
+    with pytest.raises(NotImplementedError, match="gromacs_native"):
+        build.build_potential_terms(md.Topology.from_openmm(topology), config, data_root=tmp_path)

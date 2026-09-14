@@ -7,6 +7,8 @@ are torch tensors in nm / kJ.mol^-1; ASE is an internal implementation detail.
 
 - :func:`build_potential` / :func:`build_potential_from_file` -- the usual entry
   point: a differentiable potential straight from a simulation config.
+- :func:`build_potential_terms` / :func:`build_potential_terms_from_file` -- the
+  same energy split into one potential per OpenMM force, for diagnostics.
 - :func:`build_calculator` / :func:`build_calculator_from_file` -- the ASE
   calculator alone, for callers that do not want torch.
 - :class:`Potential` -- the differentiable, engine-backed potential.
@@ -30,6 +32,8 @@ from md_simulations.torch_potentials.build import (
     build_calculator_from_file,
     build_potential,
     build_potential_from_file,
+    build_potential_terms,
+    build_potential_terms_from_file,
 )
 
 __all__ = [
@@ -39,6 +43,8 @@ __all__ = [
     "build_calculator_from_file",
     "build_potential",
     "build_potential_from_file",
+    "build_potential_terms",
+    "build_potential_terms_from_file",
 ]
 
 # Names whose modules import torch. Kept out of the eager import above so a
