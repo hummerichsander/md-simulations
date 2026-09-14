@@ -1,0 +1,32 @@
+# Chignolin (1UAO), AMBER14 + GBn2 implicit solvent, 330 K, WITHOUT bond constraints.
+#
+# The twin of cln-amber14-implicit-330K.yaml. See the header of
+# trpcage-amber14-implicit-unconstrained-300K.yaml for why this exists: under `constraints: hbonds`
+# OpenMM deletes the harmonic bond term of every constrained bond, so the energy does not score
+# CLN's 61 X-H bond lengths at all, and reweighting against it costs ~5.5 nats of log-weight
+# spread that no training removes.
+#
+# GBn2, matching cln-split.yaml's aa_potential_config_path -- not the OBC2 twin. The relaxation
+# and the reweighting target must be the same potential.
+#
+# Not intended for production MD; the timestep resolves the unconstrained X-H stretch (~11 fs).
+engine: amber
+system: cln
+output_subdir: cln/AMBER14_implicit_unconstrained_330K
+
+input_pdb: pdbs/1UAO.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+constraints: none
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.0005

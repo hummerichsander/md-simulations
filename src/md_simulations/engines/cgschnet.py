@@ -186,9 +186,7 @@ class _IncrementalTrajectoryWriter:
                         self._energies[r].write(f"{step},{energy}\n")
                 if forces is not None:
                     for frame in forces[r]:
-                        self._forces[r].write(
-                            " ".join(f"{c:g}" for c in frame.reshape(-1)) + "\n"
-                        )
+                        self._forces[r].write(" ".join(f"{c:g}" for c in frame.reshape(-1)) + "\n")
                 self._energies[r].flush()
                 self._forces[r].flush()
 

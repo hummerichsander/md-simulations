@@ -137,7 +137,9 @@ def main() -> None:
     if pairs:
         atoms_per_mol = max(max(i, j) for i, j in pairs)
         num_mols = len(serials) // atoms_per_mol
-        print(f"Detected {atoms_per_mol} atoms/molecule → replicating bonds for {num_mols} molecule(s)")
+        print(
+            f"Detected {atoms_per_mol} atoms/molecule → replicating bonds for {num_mols} molecule(s)"
+        )
 
     conect = build_conect_records(pairs, serials)
     write_pdb_with_conect(lines, conect, args.output)

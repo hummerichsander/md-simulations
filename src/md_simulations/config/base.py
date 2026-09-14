@@ -66,13 +66,21 @@ class AmberConfig(_Common):
 
     engine: Literal["amber"] = "amber"
     input_pdb: str
-    forcefield: list[str] = Field(default_factory=lambda: ["amber14-all.xml", "amber14/tip3pfb.xml"])
+    forcefield: list[str] = Field(
+        default_factory=lambda: ["amber14-all.xml", "amber14/tip3pfb.xml"]
+    )
     ph: float = 7.0
     padding: float = 1.0
     water_model: str = "tip3p"
     nonbonded_cutoff: float = 1.0
     implicit_solvent: bool = False
     salt_conc: float = 0.0
+    # "hbonds" is what every trajectory in this repo was produced with, and a 2 fs timestep needs
+    # it. Set "none" only to build a *scoring* potential: OpenMM deletes the harmonic bond term of
+    # every constrained bond, so under "hbonds" the energy is nearly independent of the X-H bond
+    # lengths, and reweighting a generative model against it charges the model for coordinates the
+    # target has no opinion about. An unconstrained system needs a ~0.5 fs timestep to integrate.
+    constraints: Literal["hbonds", "allbonds", "none"] = "hbonds"
 
 
 class PureLiquidConfig(_Common):
@@ -80,9 +88,7 @@ class PureLiquidConfig(_Common):
 
     engine: Literal["pure_liquid"] = "pure_liquid"
     input_pdb: str
-    forcefield: list[str] = Field(
-        default_factory=lambda: ["charmm36.xml", "charmm36/water.xml"]
-    )
+    forcefield: list[str] = Field(default_factory=lambda: ["charmm36.xml", "charmm36/water.xml"])
     pressure: float = 1.0
 
 

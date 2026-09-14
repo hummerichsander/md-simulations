@@ -1,0 +1,37 @@
+# Trp-cage (2JOF), AMBER14 + GBn2 implicit solvent, 300 K, WITHOUT bond constraints.
+#
+# The twin of trpcage-amber14-implicit-300K.yaml, and it exists for one reason: to *score* the
+# bonds to hydrogen. Under `constraints: hbonds` OpenMM deletes the harmonic bond term of every
+# constrained bond, so that potential's energy is nearly independent of all 136 X-H bond lengths
+# (displacing one by +-10 pm costs 0.05-6 kJ/mol, against ~33 kJ/mol for a heavy-heavy bond, and
+# for some the energy even drops). A flow still has to generate those coordinates, so reweighting
+# against the constrained potential charges it for degrees of freedom the target never scores --
+# ~8 nats of log-weight spread that no training removes.
+#
+# Use this file for two things, and use the same file for both or the exercise is pointless:
+#   * `md-sim-relax`, to give the reference trajectory's X-H bonds their thermal width
+#   * the reweighting target the relaxed data is then scored against
+#
+# Not intended for production MD. The timestep below resolves the now-unconstrained X-H stretch
+# (period ~11 fs) rather than the 2 fs the constrained run used; a fresh 100 ns trajectory at this
+# timestep would cost 4x the constrained one, which is exactly what relaxation avoids.
+engine: amber
+system: trp-cage
+output_subdir: trp-cage/AMBER14_implicit_unconstrained_300K
+
+input_pdb: pdbs/2JOF.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+constraints: none
+
+num_steps: 50000000
+output_freq: 1000
+report_interval: 1000
+temperature: 300
+friction: 1.0
+timestep: 0.0005

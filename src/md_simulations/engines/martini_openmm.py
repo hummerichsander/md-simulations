@@ -100,7 +100,9 @@ class MartiniEngine(OpenMMEngine):
         )
 
         if cfg.pressure is not None:
-            self.logger.info(f"Adding Monte Carlo barostat at {cfg.pressure} bar, {cfg.temperature} K...")
+            self.logger.info(
+                f"Adding Monte Carlo barostat at {cfg.pressure} bar, {cfg.temperature} K..."
+            )
             system.addForce(
                 openmm.MonteCarloBarostat(
                     cfg.pressure * unit.bar,  # type: ignore[arg-type]

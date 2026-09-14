@@ -25,7 +25,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
     logger.info(f"Config:     {args.config}")
     logger.info(f"Data root:  {data_root}")
     logger.info(f"Output dir: {output_dir}")
-    logger.info(f"Steps:      {config.num_steps:,}  (dt={config.timestep} ps, T={config.temperature} K)")
+    logger.info(
+        f"Steps:      {config.num_steps:,}  (dt={config.timestep} ps, T={config.temperature} K)"
+    )
     logger.info("=" * 60)
 
     engine = build_engine(config, data_root, logger)

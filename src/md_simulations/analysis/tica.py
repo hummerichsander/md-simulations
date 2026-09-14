@@ -77,9 +77,7 @@ FEATURES = {
 }
 
 
-def compute_features(
-    traj, features: list[str], exclude_neighbors: int = 2
-) -> np.ndarray:
+def compute_features(traj, features: list[str], exclude_neighbors: int = 2) -> np.ndarray:
     """Compute and concatenate the requested feature sets for a trajectory.
 
     :param traj: An ``mdtraj.Trajectory``.
@@ -98,9 +96,7 @@ def compute_features(
     return np.concatenate(blocks, axis=1)
 
 
-def fit_tica(
-    features: np.ndarray | list[np.ndarray], lagtime: int, dim: int, scaling: str | None
-):
+def fit_tica(features: np.ndarray | list[np.ndarray], lagtime: int, dim: int, scaling: str | None):
     """Fit a TICA model to one or more feature trajectories.
 
     Pass a list to fit across independent segments (separate runs or replicas): deeptime
@@ -253,9 +249,7 @@ def main() -> None:
         help="TICA lag time(s) in frames (fitting). Passing several fits one model "
         "per lag and writes a multi-panel FES comparison.",
     )
-    parser.add_argument(
-        "--dim", type=int, default=2, help="Number of independent components."
-    )
+    parser.add_argument("--dim", type=int, default=2, help="Number of independent components.")
     parser.add_argument(
         "--scaling",
         default="kinetic_map",
@@ -268,9 +262,7 @@ def main() -> None:
         help="Preexisting pickled TICA model (.pkl); project via its .transform "
         "instead of fitting.",
     )
-    parser.add_argument(
-        "-o", "--out-dir", default=".", help="Directory for outputs (default cwd)."
-    )
+    parser.add_argument("-o", "--out-dir", default=".", help="Directory for outputs (default cwd).")
     parser.add_argument(
         "--prefix", default="tica", help="Filename prefix for outputs (default 'tica')."
     )
