@@ -200,7 +200,7 @@ def resample_trajectory(
     :param chunk: Number of frames held in memory at once.
     :return: The number of frames written, and the per-bond length std before and after, in nm."""
     import mdtraj as md
-    from mdtraj.formats import XTCTrajectoryFile
+    from mdtraj.formats import TRRTrajectoryFile, XTCTrajectoryFile
     from mdtraj.utils import in_units_of
 
     top = md.load_topology(topology)
@@ -229,7 +229,7 @@ def resample_trajectory(
             n += len(traj)
 
             xyz = in_units_of(resampled.astype(np.float32), "nanometers", f.distance_unit)
-            if isinstance(f, XTCTrajectoryFile):
+            if isinstance(f, XTCTrajectoryFile | TRRTrajectoryFile):
                 f.write(xyz, time=traj.time)
             else:
                 f.write(xyz)

@@ -15,8 +15,8 @@
 #   ./slurm/resample-h-bonds-alaX.sh [--dry-run]
 #   SYSTEMS="2 5" ./slurm/resample-h-bonds-alaX.sh
 #
-# Output lands next to each input as trajectory_hresampled.dcd (lossless; see resample-h-bonds.sh
-# on why not xtc). The other knobs of resample-h-bonds.sh (STRIDE, SEED, ...) pass through.
+# Output lands next to each input as trajectory_hresampled.trr (lossless, and unlike dcd fast to
+# write over NFS; see resample-h-bonds.sh). Its other knobs (STRIDE, SEED, ...) pass through.
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ cd "${SLURM_SUBMIT_DIR:-.}"
 SYSTEMS="${SYSTEMS:-2 3 4 5 6 7 8 9 10 11 12 16 24 32}"
 TEMPLATE="${TEMPLATE:-configs/alaX-amber14-implicit-unconstrained-330K.yaml}"
 DATA_DIR="${MD_DATA_ROOT:-$PWD/data}/alaX"
-export OUT_EXT="${OUT_EXT:-dcd}"
+export OUT_EXT="${OUT_EXT:-trr}"
 
 DRY_RUN=0
 [[ ${1:-} == --dry-run ]] && DRY_RUN=1

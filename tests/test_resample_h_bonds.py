@@ -173,7 +173,7 @@ class TestConstrainedBondParameters:
 class TestResampleTrajectory:
     """Tests for the chunked resampling of a trajectory file."""
 
-    @pytest.mark.parametrize("ext", ["dcd", "xtc"])
+    @pytest.mark.parametrize("ext", ["dcd", "xtc", "trr"])
     def test_chunking_does_not_change_the_output(self, tmp_path: Path, ext: str) -> None:
         """Test that a chunked pass writes what a single in-memory pass over the selection would.
 
