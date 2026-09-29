@@ -1,0 +1,6 @@
+# HDF key mapping for configs/training/ala2-cgschnet-scratch-330K.yaml. Training targets the
+# delta forces left after the fitted priors; `mlcg-combine_model` adds the priors back.
+hdf_key_mapping:
+  embeds: attrs:cg_embeds
+  coords: cg_coords
+  forces: cg_delta_forces

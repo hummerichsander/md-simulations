@@ -58,6 +58,9 @@ _SCHNET_KEY = "SchNet"
 # Backbone beads whose embedding index must be residue-independent; used as a cheap,
 # permutation-independent check that input_pdb and configurations_file agree.
 _BACKBONE_BEADS = ("N", "C", "O")
+# Capping groups are outside that vocabulary: a model fit on a capped peptide may type the
+# ACE carbonyl C and the NME amide N apart from the residues' own.
+_CAP_RESIDUES = ("ACE", "NME")
 
 _DTYPES: dict[str, torch.dtype] = {"float32": torch.float32, "float64": torch.float64}
 
@@ -534,13 +537,17 @@ def _check_backbone_embeddings(
     regardless of residue. Checking that against the model's own bead topology is a
     cheap way to catch an ``input_pdb`` and ``configurations_file`` that describe
     different systems -- and it is independent of the permutation logic, so the two
-    cannot fail together for the same reason.
+    cannot fail together for the same reason. Beads of ``ACE``/``NME`` caps are exempt.
 
     :param bead_topology: The model's CG topology, in the same order as ``atom_types``.
     :param atom_types: ``(N,)`` embedding indices from the configuration.
     :raises ValueError: If a backbone bead name maps to more than one index."""
     for name in _BACKBONE_BEADS:
-        indices = [i for i, atom in enumerate(bead_topology.atoms) if atom.name == name]
+        indices = [
+            i
+            for i, atom in enumerate(bead_topology.atoms)
+            if atom.name == name and atom.residue.name not in _CAP_RESIDUES
+        ]
         if not indices:
             continue
         distinct = sorted({int(atom_types[i]) for i in indices})

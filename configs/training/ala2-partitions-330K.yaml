@@ -1,0 +1,25 @@
+# Train/validation split for configs/training/ala2-cgschnet-scratch-330K.yaml; its own file for
+# the jsonargparse reason given in trpcage-partitions-330K.yaml.
+#
+# `md-sim-cgschnet-priors` cuts the 10 ns run into ten contiguous 1 ns blocks, and the last
+# one is held out whole: frames 20 fs apart are near-duplicates, so a random frame split
+# would report a validation loss that merely echoes the training loss.
+
+train:
+  metasets:
+    ala2:
+      molecules: [seg00, seg01, seg02, seg03, seg04, seg05, seg06, seg07, seg08]
+      stride: 1
+  # "batch_sizes", plural: see trpcage-partitions-330K.yaml.
+  batch_sizes:
+    ala2: 512
+  subsample_random_seed: 42
+
+val:
+  metasets:
+    ala2:
+      molecules: [seg09]
+      stride: 5
+  batch_sizes:
+    ala2: 512
+  subsample_random_seed: 42

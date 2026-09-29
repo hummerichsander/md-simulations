@@ -20,6 +20,7 @@ from torch import Tensor, nn
 
 from md_simulations.torch_potentials.cgschnet import (
     CGSchNetPotential,
+    _check_backbone_embeddings,
     bead_permutation,
     prune_empty_terms,
     unwrap_energy_models,
@@ -555,6 +556,31 @@ def test_unpruned_empty_term_raises_rather_than_collapsing() -> None:
     )
     with pytest.raises(RuntimeError, match="empty interaction list"):
         potential(torch.randn(2, 6, 3, dtype=torch.float64))
+
+
+def test_backbone_check_rejects_residue_dependent_types() -> None:
+    """A backbone bead typed differently across residues is caught.
+
+    :return: None."""
+    topology = _topology(["ALA", "ALA"], MODEL_ORDER)
+    atom_types = torch.arange(topology.n_atoms)
+    with pytest.raises(ValueError, match="several embedding indices"):
+        _check_backbone_embeddings(topology, atom_types)
+
+
+def test_backbone_check_exempts_caps() -> None:
+    """ACE's carbonyl C and NME's amide N may carry types of their own.
+
+    This is the alanine-dipeptide ``AL_CG_MAP`` model: one type per bead.
+
+    :return: None."""
+    topology = md.Topology()
+    chain = topology.add_chain()
+    for resname, names in (("ACE", ["C"]), ("ALA", ["N", "CA", "CB", "C"]), ("NME", ["N"])):
+        residue = topology.add_residue(resname, chain)
+        for name in names:
+            topology.add_atom(name, md.element.carbon, residue)
+    _check_backbone_embeddings(topology, torch.arange(topology.n_atoms))
 
 
 def test_permutation_is_identity_when_orders_agree() -> None:

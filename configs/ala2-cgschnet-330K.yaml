@@ -1,0 +1,37 @@
+# Alanine dipeptide, CGSchNet trained from scratch at 330 K on the AL_CG_MAP beads
+# (ACE C, ALA N CA CB C, NME N).
+#
+# `model_file` is `mlcg-combine_model` of the best checkpoint of
+# configs/training/ala2-cgschnet-scratch-330K.yaml with the priors `md-sim-cgschnet-priors`
+# fit; slurm/ala2-cgschnet-scratch-330K.sh does both. `configurations_file` comes from the
+# same priors step and is the only source of the bead types and prior neighbour lists.
+#
+# Valid only at 330 K, like every force-matched PMF; compare against
+# data/alaX/ala2_AMBER14_implicit_330K, the run it was fit on.
+engine: cgschnet
+system: ala2
+output_subdir: alaX/ala2_CGSchNet_330K
+
+input_pdb: pdbs/ala2_6B-CG.pdb
+configurations_file: alaX/ala2_fm_330K/configurations.pt
+model_file: models/cgschnet/ala2_scratch_330K.pt
+
+device: cuda
+dtype: float32
+model_energy_unit: kcal/mol
+replica: 0
+n_replicas: 32
+
+num_steps: 2500000
+output_freq: 250
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: ala2-cgschnet-330K
+  partition: gshort
+  gres: gpu:1
+  time: 0-24:00:00
+  mem: 20G
