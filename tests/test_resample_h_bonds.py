@@ -10,6 +10,7 @@ from md_simulations.config.base import AmberConfig
 from md_simulations.sampling.resample_h_bonds import (
     constrained_bond_parameters,
     resample_bond_lengths,
+    resample_trajectory,
 )
 
 from test_engines import _ALA3_PDB
@@ -167,3 +168,42 @@ class TestConstrainedBondParameters:
 
         with pytest.raises(ValueError, match="constraints"):
             constrained_bond_parameters(config, tmp_path, "hbonds")
+
+
+class TestResampleTrajectory:
+    """Tests for the chunked resampling of a trajectory file."""
+
+    @pytest.mark.parametrize("ext", ["dcd", "xtc", "trr"])
+    def test_chunking_does_not_change_the_output(self, tmp_path: Path, ext: str) -> None:
+        """Test that a chunked pass writes what a single in-memory pass over the selection would.
+
+        :param tmp_path: Pytest temporary directory.
+        :param ext: Output format.
+        :return: None."""
+        import mdtraj as md
+
+        positions, movers, anchors = _two_bond_system(n_frames=50)
+        top = md.Topology()
+        residue = top.add_residue("X", top.add_chain())
+        for name in ("C", "H1", "H2", "O"):
+            top.add_atom(name, md.element.get_by_symbol(name[0]), residue)
+        md.Trajectory(positions.astype(np.float32), top).save(str(tmp_path / "in.dcd"))
+        md.Trajectory(positions[:1].astype(np.float32), top).save(str(tmp_path / "top.pdb"))
+        r0, sigma = np.array([0.109, 0.101]), np.array([0.003, 0.003])
+
+        n, _, after = resample_trajectory(
+            str(tmp_path / "in.dcd"), str(tmp_path / "top.pdb"), tmp_path / f"out.{ext}",
+            movers, anchors, r0, sigma, np.random.default_rng(5),
+            start=3, stop=41, stride=2, chunk=4,
+        )
+
+        selected = md.load(str(tmp_path / "in.dcd"), top=str(tmp_path / "top.pdb")).xyz[3:41:2]
+        expected = resample_bond_lengths(
+            selected.astype(np.float64), movers, anchors, r0, sigma, np.random.default_rng(5)
+        )
+        written = md.load(str(tmp_path / f"out.{ext}"), top=str(tmp_path / "top.pdb")).xyz
+        d = np.linalg.norm(expected[:, movers] - expected[:, anchors], axis=-1)
+
+        assert n == len(selected) == len(written)
+        assert np.allclose(written, expected, atol=1e-3 if ext == "xtc" else 1e-6)
+        assert np.allclose(after, d.std(axis=0), rtol=1e-6)

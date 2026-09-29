@@ -38,7 +38,9 @@
 # OUT_EXT matters more here than for a dynamics run: .xtc quantizes to a 1e-3 nm grid, which is
 # 0.41 pm of noise -- the very grid that made these bonds look narrow rather than frozen. Against
 # the 2.86 pm width being created that is a ~1% inflation, worth about 0.2 nats of log-weight
-# spread. Negligible, but `OUT_EXT=dcd` writes lossless float32 and costs nothing.
+# spread. Negligible, but `OUT_EXT=trr` writes lossless float32 and costs nothing. Prefer it over
+# `dcd` on /remote: mdtraj's DCD writer rewrites the header after every frame, which on NFS is
+# ~160x slower (measured: 16 s against 0.1 s for 20k ala2 frames; trr and xtc are unaffected).
 
 set -euo pipefail
 

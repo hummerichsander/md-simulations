@@ -39,7 +39,6 @@ from md_simulations.config import SimulationConfig, load_config, resolve_data_ro
 from md_simulations.core.logging import setup_logger
 from md_simulations.engines import build_engine
 from md_simulations.engines.base import OpenMMEngine
-from md_simulations.sampling.relax import frame_indices
 
 NM = unit.nanometer
 KJ_PER_NM2 = unit.kilojoule_per_mole / unit.nanometer**2
@@ -168,12 +167,84 @@ def resample_bond_lengths(
     return out
 
 
+def resample_trajectory(
+    trajectory: str,
+    topology: str,
+    out: Path,
+    movers: np.ndarray,
+    anchors: np.ndarray,
+    r0: np.ndarray,
+    sigma: np.ndarray,
+    rng: np.random.Generator,
+    start: int = 0,
+    stop: int | None = None,
+    stride: int = 1,
+    chunk: int = 100_000,
+) -> tuple[int, np.ndarray, np.ndarray]:
+    """Resample a trajectory file chunk by chunk, so memory stays flat in the trajectory length.
+
+    Frames are drawn independently and a generator's draws do not depend on how they are split, so
+    the output is bit-identical to resampling the whole trajectory at once.
+
+    :param trajectory: Input trajectory path.
+    :param topology: Topology of the input trajectory.
+    :param out: Output trajectory path; the format follows its extension.
+    :param movers: Index of the atom to move, per bond.
+    :param anchors: Index of the atom it is measured from, per bond.
+    :param r0: Equilibrium length per bond, in nanometre.
+    :param sigma: Gaussian width per bond, in nanometre.
+    :param rng: Random generator for the draws.
+    :param start: First input frame to take.
+    :param stop: Stop before this input frame, or ``None`` for the end.
+    :param stride: Take every ``stride``-th input frame.
+    :param chunk: Number of frames held in memory at once.
+    :return: The number of frames written, and the per-bond length std before and after, in nm."""
+    import mdtraj as md
+    from mdtraj.formats import TRRTrajectoryFile, XTCTrajectoryFile
+    from mdtraj.utils import in_units_of
+
+    top = md.load_topology(topology)
+    if (highest := max(movers.max(), anchors.max())) >= top.n_atoms:
+        raise ValueError(
+            f"the config indexes atom {highest} but the trajectory has only {top.n_atoms}; the "
+            "config and the trajectory are not the same system"
+        )
+
+    remaining = None if stop is None else len(range(start, stop, stride))
+    n = 0
+    # moments of d - r0 rather than d, so the frozen input's ~1e-6 nm width survives float64
+    moments = np.zeros((4, len(movers)))
+    with md.open(str(out), "w") as f:
+        for traj in md.iterload(trajectory, chunk=chunk, top=top, skip=start, stride=stride):
+            if remaining is not None:
+                traj = traj[:remaining]
+                remaining -= len(traj)
+
+            positions = traj.xyz.astype(np.float64)
+            resampled = resample_bond_lengths(positions, movers, anchors, r0, sigma, rng)
+
+            before = np.linalg.norm(positions[:, movers] - positions[:, anchors], axis=-1) - r0
+            after = np.linalg.norm(resampled[:, movers] - resampled[:, anchors], axis=-1) - r0
+            moments += [before.sum(0), (before**2).sum(0), after.sum(0), (after**2).sum(0)]
+            n += len(traj)
+
+            xyz = in_units_of(resampled.astype(np.float32), "nanometers", f.distance_unit)
+            if isinstance(f, XTCTrajectoryFile | TRRTrajectoryFile):
+                f.write(xyz, time=traj.time)
+            else:
+                f.write(xyz)
+
+            if remaining == 0:
+                break
+
+    if n == 0:
+        raise ValueError(f"no frames selected from {trajectory}")
+    mean = moments / n
+    return n, np.sqrt(mean[1] - mean[0] ** 2), np.sqrt(mean[3] - mean[2] ** 2)
+
+
 def main() -> None:
     """Entry point for the ``md-sim-resample-hbonds`` command."""
-    import mdtraj as md
-
-    from md_simulations.analysis.fes import drop_spurious_box
-
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -192,6 +263,7 @@ def main() -> None:
     parser.add_argument("--start", type=int, default=0, help="First input frame to take.")
     parser.add_argument("--stop", type=int, default=None, help="Stop before this input frame.")
     parser.add_argument("--seed", type=int, default=42, help="Seed for the bond-length draws.")
+    parser.add_argument("--chunk", type=int, default=100_000, help="Frames held in memory at once.")
     parser.add_argument(
         "--data-root", default=None, help="Root for the config's paths (overrides MD_DATA_ROOT)."
     )
@@ -227,34 +299,28 @@ def main() -> None:
         f"{config.temperature} K: width {sigma.min() * 1000:.2f}-{sigma.max() * 1000:.2f} pm."
     )
 
-    traj = drop_spurious_box(md.load(args.trajectory, top=args.topology))
-    selection = frame_indices(traj.n_frames, args.start, args.stop, args.stride)
-    logger.info(f"Selected {len(selection)} of {traj.n_frames} frames.")
-
-    positions = traj.xyz[selection].astype(np.float64)
-    if (highest := max(movers.max(), anchors.max())) >= traj.n_atoms:
-        raise ValueError(
-            f"the config indexes atom {highest} but the trajectory has only {traj.n_atoms}; the "
-            "config and the trajectory are not the same system"
-        )
-
-    resampled = resample_bond_lengths(
-        positions, movers, anchors, r0, sigma, np.random.default_rng(args.seed)
+    n, before, achieved = resample_trajectory(
+        args.trajectory,
+        args.topology,
+        args.out,
+        movers,
+        anchors,
+        r0,
+        sigma,
+        np.random.default_rng(args.seed),
+        start=args.start,
+        stop=args.stop,
+        stride=args.stride,
+        chunk=args.chunk,
     )
 
     # Exact by construction, so a ratio away from 1 means a bug -- the wrong atom moved, or the
     # wrong width -- rather than a run that needs to be longer.
-    achieved = np.linalg.norm(resampled[:, movers] - resampled[:, anchors], axis=-1).std(axis=0)
-    before = np.linalg.norm(positions[:, movers] - positions[:, anchors], axis=-1).std(axis=0)
     logger.info(
         f"Bond width {before.mean() * 1000:.3f} -> {achieved.mean() * 1000:.3f} pm "
         f"(target {sigma.mean() * 1000:.3f}, ratio {(achieved / sigma).mean():.3f})."
     )
-
-    out_traj = md.Trajectory(resampled.astype(np.float32), traj.topology)
-    out_traj.time = traj.time[selection]
-    out_traj.save(str(args.out))
-    logger.info(f"Wrote {out_traj.n_frames} resampled frames to {args.out}.")
+    logger.info(f"Wrote {n} resampled frames to {args.out}.")
 
 
 if __name__ == "__main__":
