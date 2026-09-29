@@ -38,11 +38,13 @@ from typing import TYPE_CHECKING
 
 from md_simulations.config import load_config, resolve_data_root
 from md_simulations.config.base import SimulationConfig
-from md_simulations.engines import OpenMMEngine, build_engine
+from md_simulations.engines import BuiltSystem, OpenMMEngine, build_engine
 from md_simulations.torch_potentials.protocol import PotentialLike
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator
+
+    from md_simulations.torch_potentials.potential import Potential
 
 # Shared by every deferred import in the package (here and in __init__.__getattr__)
 # so the guidance a user hits is identical whichever entry point they came through.
@@ -88,6 +90,35 @@ def _silence_build() -> Iterator[None]:
         pkg_logger.setLevel(prev_level)
 
 
+def _build_openmm_system(
+    config: SimulationConfig,
+    data_root: str | Path | None,
+    quiet: bool,
+) -> BuiltSystem:
+    """Build the engine's ``BuiltSystem``, rejecting engines with no OpenMM bridge.
+
+    :param config: A validated engine-specific config model.
+    :param data_root: Data root for resolving inputs, or ``None`` for the usual precedence.
+    :param quiet: Suppress the verbose build output.
+    :return: The engine's ``BuiltSystem`` (system, positions, box vectors).
+    :raises NotImplementedError: If the config's engine has no calculator bridge."""
+    root = resolve_data_root(config, str(data_root) if data_root is not None else None)
+
+    logger = logging.getLogger("md_simulations.torch_potentials")
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
+
+    with _silence_build() if quiet else contextlib.nullcontext():
+        engine = build_engine(config, root, logger)
+
+        if not isinstance(engine, OpenMMEngine):
+            raise NotImplementedError(
+                f"calculator export is not yet supported for engine {config.engine!r}"
+            )
+
+        return engine.build_system()
+
+
 def build_calculator(
     config: SimulationConfig,
     data_root: str | Path | None = None,
@@ -118,33 +149,20 @@ def build_calculator(
             "build_potential()/build_potential_from_file() to get a CGSchNetPotential."
         )
 
-    root = resolve_data_root(config, str(data_root) if data_root is not None else None)
+    built = _build_openmm_system(config, data_root, quiet)
 
-    logger = logging.getLogger("md_simulations.torch_potentials")
-    if not logger.handlers:
-        logger.addHandler(logging.NullHandler())
+    try:
+        from md_simulations.torch_potentials.calculators.openmm import OpenMMCalculator
+    except ModuleNotFoundError as exc:  # pragma: no cover - needs a core-only install
+        raise ModuleNotFoundError(f"building a calculator {EXTRA_HINT}") from exc
 
-    with _silence_build() if quiet else contextlib.nullcontext():
-        engine = build_engine(config, root, logger)
-
-        if isinstance(engine, OpenMMEngine):
-            try:
-                from md_simulations.torch_potentials.calculators.openmm import OpenMMCalculator
-            except ModuleNotFoundError as exc:  # pragma: no cover - needs a core-only install
-                raise ModuleNotFoundError(f"building a calculator {EXTRA_HINT}") from exc
-
-            built = engine.build_system()
-            return OpenMMCalculator.from_system(
-                built.system,
-                built.positions,
-                box_vectors=built.box_vectors,
-                groups=groups,
-                platform=platform,
-            )
-
-        raise NotImplementedError(
-            f"calculator export is not yet supported for engine {config.engine!r}"
-        )
+    return OpenMMCalculator.from_system(
+        built.system,
+        built.positions,
+        box_vectors=built.box_vectors,
+        groups=groups,
+        platform=platform,
+    )
 
 
 def build_calculator_from_file(
@@ -261,6 +279,102 @@ def _build_cgschnet_potential(
             raise ModuleNotFoundError(
                 f"building a cgschnet potential {CGSCHNET_EXTRA_HINT}"
             ) from exc
+
+
+def build_potential_terms(
+    topology: "mdtraj.Topology",  # noqa: F821
+    config: SimulationConfig,
+    data_root: str | Path | None = None,
+    *,
+    platform: str | None = None,
+    quiet: bool = True,
+) -> dict[str, "Potential"]:
+    """Build one potential per OpenMM force, so an energy can be read term by term.
+
+    ``build_potential`` returns the total; this returns the summands. Every force is
+    assigned its own force group here, *before* the ``Context`` is created -- OpenMM
+    snapshots the group assignments at construction, so a system built the usual way
+    leaves every force in group 0 and ``groups={0}`` would return the total again.
+
+    All the returned potentials share one ``Context`` but carry their own calculator.
+    That is deliberate: ASE only recomputes when the positions, cell or pbc change, so
+    mutating ``groups`` on a single shared calculator would silently return the
+    previously evaluated term.
+
+    Every force is included, so terms that carry no energy (``CMMotionRemover``) appear
+    as a constant zero, and the terms sum to ``build_potential``'s total.
+
+    :param topology: mdtraj ``Topology`` whose atoms match the config's system.
+    :param config: A validated engine-specific config model.
+    :param data_root: See :func:`build_calculator`.
+    :param platform: See :func:`build_calculator`.
+    :param quiet: See :func:`build_calculator`.
+    :return: Force name -> :class:`Potential`, ordered as the forces appear in the
+        system. Repeated force classes are suffixed ``#2``, ``#3``, ...
+    :raises NotImplementedError: If the config's engine has no calculator bridge.
+    :raises ValueError: If the system has more than 32 forces, OpenMM's group limit."""
+    try:
+        from md_simulations.torch_potentials.calculators.openmm import OpenMMCalculator
+        from md_simulations.torch_potentials.potential import Potential
+    except ModuleNotFoundError as exc:  # pragma: no cover - needs a core-only install
+        raise ModuleNotFoundError(f"building a potential {EXTRA_HINT}") from exc
+
+    built = _build_openmm_system(config, data_root, quiet)
+
+    num_forces = built.system.getNumForces()
+    if num_forces > 32:
+        raise ValueError(
+            f"system has {num_forces} forces but OpenMM allows only 32 force groups; "
+            "a per-term split is not possible for this system."
+        )
+
+    names: list[str] = []
+    seen: dict[str, int] = {}
+    for i in range(num_forces):
+        force = built.system.getForce(i)
+        force.setForceGroup(i)
+        name = type(force).__name__
+        seen[name] = seen.get(name, 0) + 1
+        names.append(name if seen[name] == 1 else f"{name}#{seen[name]}")
+
+    # one Context for all of them; the first calculator is what creates it.
+    first = OpenMMCalculator.from_system(
+        built.system,
+        built.positions,
+        box_vectors=built.box_vectors,
+        groups={0},
+        platform=platform,
+    )
+    calculators = [first] + [
+        OpenMMCalculator(first.context, groups={i}) for i in range(1, num_forces)
+    ]
+
+    return {name: Potential(topology, calc) for name, calc in zip(names, calculators)}
+
+
+def build_potential_terms_from_file(
+    topology: "mdtraj.Topology",  # noqa: F821
+    path: str | Path,
+    data_root: str | Path | None = None,
+    *,
+    platform: str | None = None,
+    quiet: bool = True,
+) -> dict[str, "Potential"]:
+    """Load a YAML config and build one potential per OpenMM force.
+
+    :param topology: mdtraj ``Topology`` whose atoms match the config's system.
+    :param path: Path to the YAML config file.
+    :param data_root: See :func:`build_calculator`.
+    :param platform: See :func:`build_calculator`.
+    :param quiet: See :func:`build_calculator`.
+    :return: See :func:`build_potential_terms`."""
+    return build_potential_terms(
+        topology,
+        load_config(path),
+        data_root,
+        platform=platform,
+        quiet=quiet,
+    )
 
 
 def build_potential_from_file(

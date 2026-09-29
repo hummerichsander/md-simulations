@@ -179,7 +179,21 @@ Hand it a whole trajectory instead of one frame and the frame axis just becomes 
 axis, `(F, N, 3)` in and `(F,)` out. For several *different* systems at once there's
 `batched_potential_energy([(pot1, x1), (pot2, x2), ...])`. Periodic boxes take
 `unitcell_lengths` in nm alongside the positions, and `groups=` narrows the evaluation to a
-subset of OpenMM force groups when you want to see one energy term at a time.
+subset of OpenMM force groups. That is only a filter, though: `forcefield.createSystem`
+leaves every force in group 0, so on an AMBER system `groups={0}` returns the total.
+
+To see one energy term at a time, use `build_potential_terms` /
+`build_potential_terms_from_file`. They return `{force name: Potential}` and give each force
+its own group before the `Context` is built, so the parts sum to `build_potential`'s total:
+
+```python
+terms = build_potential_terms_from_file(top, "configs/trpcage-amber14-implicit-300K.yaml")
+{name: pot(x).item() for name, pot in terms.items()}
+# {'HarmonicBondForce': 407.0, 'NonbondedForce': -1164.0, 'CustomGBForce': -2553.9, ...}
+```
+
+Each term keeps its own calculator on a shared `Context`, because ASE caches on geometry
+alone — mutating `groups` on one calculator would return the previous term.
 
 The one real limitation: on the ASE path you get first derivatives and nothing more. The
 engine is opaque to autograd, so `backward` reconstructs the gradient from the forces the
