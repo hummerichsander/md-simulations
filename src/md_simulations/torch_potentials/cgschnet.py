@@ -127,10 +127,12 @@ def unwrap_energy_models(model: nn.Module) -> dict[str, nn.Module]:
     directly. Each child is unwrapped via ``getattr(child, "model", child)``, so an
     already-bare module passes through unchanged.
 
+    A checkpoint without the SchNet term is a priors-only model -- the Boltzmann-inverted
+    bonded terms on their own -- and is accepted like any other.
+
     :param model: The loaded checkpoint, an ``mlcg.nn.gradients.SumOut``.
     :return: Term name -> bare energy module, in the checkpoint's order.
-    :raises ValueError: If ``model`` has no ``models`` mapping, or if the SchNet term
-        is absent (which would mean the checkpoint is priors-only)."""
+    :raises ValueError: If ``model`` has no ``models`` mapping, or it is empty."""
     if (children := getattr(model, "models", None)) is None:
         raise ValueError(
             f"expected a checkpoint with a 'models' mapping (mlcg SumOut), got "
@@ -140,11 +142,6 @@ def unwrap_energy_models(model: nn.Module) -> dict[str, nn.Module]:
     unwrapped = {name: getattr(child, "model", child) for name, child in children.items()}
     if not unwrapped:
         raise ValueError("the checkpoint's 'models' mapping is empty.")
-    if _SCHNET_KEY not in unwrapped:
-        raise ValueError(
-            f"the checkpoint has no {_SCHNET_KEY!r} term (only {sorted(unwrapped)}); "
-            "this does not look like a CGSchNet model + prior."
-        )
     return unwrapped
 
 
@@ -169,7 +166,7 @@ def prune_empty_terms(
     }
     pruned = sorted(set(models) - set(kept_models))
 
-    if len(kept_models) < 2:
+    if not set(kept_models) - {_SCHNET_KEY}:
         raise ValueError(
             "no prior term survived pruning; the configuration's neighbor_list is empty for "
             f"every term in the checkpoint ({sorted(models)[:5]}...)."

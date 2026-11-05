@@ -486,12 +486,37 @@ def test_unwrap_rejects_a_non_checkpoint() -> None:
         unwrap_energy_models(nn.Linear(1, 1))
 
 
-def test_unwrap_requires_the_schnet_term() -> None:
-    """A priors-only checkpoint is rejected.
+def test_priors_only_checkpoint_is_its_priors(coords: Tensor) -> None:
+    """A checkpoint without SchNet loads, and scores exactly its prior terms.
 
+    :param coords: The fixture frames.
     :return: None."""
-    with pytest.raises(ValueError, match="SchNet"):
-        unwrap_energy_models(_FakeSumOut({"bonds": _FakeBondPrior("bonds")}))
+    models, template = _system(6)
+    full = CGSchNetPotential(
+        models,
+        copy.deepcopy(template),
+        _topology(["ALA", "ALA"], MODEL_ORDER[:3]),
+        dtype=torch.float64,
+        energy_to_kjmol=1.0,
+    )
+    kept, neighbor_list, _ = prune_empty_terms(
+        unwrap_energy_models(_FakeSumOut({"bonds": _FakeBondPrior("bonds")})),
+        template.neighbor_list,
+    )
+    template.neighbor_list = neighbor_list
+    priors_only = CGSchNetPotential(
+        kept,
+        template,
+        _topology(["ALA", "ALA"], MODEL_ORDER[:3]),
+        dtype=torch.float64,
+        energy_to_kjmol=1.0,
+    )
+
+    assert priors_only.terms == ("bonds",)
+    x = coords * 10.0
+    bonds = (2.0 * ((x[:, 1:] - x[:, :-1]).norm(dim=-1) - 1.0) ** 2).sum(-1)
+    torch.testing.assert_close(priors_only(coords), bonds)
+    torch.testing.assert_close(full(coords) - priors_only(coords), 0.5 * x.pow(2).sum((-2, -1)))
 
 
 def test_wrapped_model_is_unusable_but_unwrapped_is_not() -> None:
