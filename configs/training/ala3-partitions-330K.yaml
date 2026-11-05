@@ -1,0 +1,20 @@
+# Train/validation split for configs/training/ala3-cgschnet-scratch-330K.yaml. The 8 ns after
+# the 2 ns burn-in are cut into eight 1 ns blocks and the last is held out whole, as for ala2.
+
+train:
+  metasets:
+    ala3:
+      molecules: [seg00, seg01, seg02, seg03, seg04, seg05, seg06]
+      stride: 1
+  batch_sizes:
+    ala3: 512
+  subsample_random_seed: 42
+
+val:
+  metasets:
+    ala3:
+      molecules: [seg07]
+      stride: 5
+  batch_sizes:
+    ala3: 512
+  subsample_random_seed: 42

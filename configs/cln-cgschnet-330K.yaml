@@ -1,0 +1,37 @@
+# Chignolin (1UAO), CGSchNet trained from scratch at 330 K on mlcg's 5-bead map (N CA CB C O,
+# 47 beads).
+#
+# `model_file` is `mlcg-combine_model` of the best checkpoint of
+# configs/training/cln-cgschnet-scratch-330K.yaml with the priors `md-sim-cgschnet-priors`
+# fit; slurm/cln-cgschnet-scratch-330K.sh does both. `configurations_file` comes from the
+# same priors step and is the only source of the bead types and prior neighbour lists.
+#
+# Valid only at 330 K, like every force-matched PMF; compare against the eight
+# data/cln/AMBER14_implicit_330K_rNN runs it was fit on (~10 % folded).
+engine: cgschnet
+system: cln
+output_subdir: cln/CGSchNet_330K
+
+input_pdb: pdbs/1UAO_5B-CG.pdb
+configurations_file: cln/cln_fm_330K/configurations.pt
+model_file: models/cgschnet/cln_scratch_330K.pt
+
+device: cuda
+dtype: float32
+model_energy_unit: kcal/mol
+replica: 0
+n_replicas: 32
+
+num_steps: 2500000
+output_freq: 250
+report_interval: 1000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: cln-cgschnet-330K
+  partition: a30
+  gres: gpu:1
+  time: 0-40:00:00
+  mem: 20G

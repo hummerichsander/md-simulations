@@ -1,4 +1,4 @@
-# Chignolin, all-atom AMBER14 with GBn2 implicit solvent, 330 K.
+# Chignolin, all-atom AMBER14 with OBC2 implicit solvent, 330 K.
 
 engine: amber
 system: cln

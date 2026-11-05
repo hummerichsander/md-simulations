@@ -1,0 +1,38 @@
+# Chignolin (1UAO), all-atom AMBER14 + GBn2 implicit solvent, 330 K, replica r03.
+# Seed: NMR model 4 of 1UAO (data/pdbs/1UAO-model03.pdb); OpenMM draws fresh velocity and
+# Langevin seeds per run.
+#
+# The eight replicas are the clean CLN production set: the AA training data of split-flows
+# (H-resampled against configs/cln-amber14-implicit-unconstrained-330K.yaml) and the
+# force-matching set of the from-scratch CGSchNet. Every start is a folded NMR model, i.e. a
+# basin of the 330 K ensemble, so after a 10 ns burn-in the frames are Boltzmann samples, unlike
+# trp-cage's seeded runs.
+engine: amber
+system: cln
+output_subdir: cln/AMBER14_implicit_330K_r03
+beamtime:
+  group: cln/AMBER14_implicit_330K
+  name: r03
+
+input_pdb: pdbs/1UAO-model03.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 250000000        # 500 ns at 2 fs; ~11.5 h at the measured 2.3 h / 100 ns on an A30
+output_freq: 2500           # 5 ps spacing -> 100,000 frames and forces
+report_interval: 5000
+temperature: 330
+friction: 1.0
+timestep: 0.002
+
+slurm:
+  job_name: cln-amber14-implicit-330K-r03
+  partition: a30
+  gres: gpu:1
+  time: 0-16:00:00
+  mem: 20G
