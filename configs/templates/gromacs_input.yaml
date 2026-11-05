@@ -4,6 +4,9 @@ engine: gromacs_input                  # engine selector (do not change)
 system: my-mol                         # short system name (shown in logs/summary)
 output_subdir: my-mol/gmx_input        # output directory, relative to the data root
 # data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+# beamtime:                           # optional; where the run is logged below beamtime/
+#   group: my-system/replica-set      #   default: the system; a replica set gets its own group
+#   name: r00                         #   default: the last part of output_subdir
 
 input_gro: my-mol/solvated.gro         # GROMACS coordinates, relative to data root
 input_top: my-mol/solvated.top         # GROMACS topology, relative to data root

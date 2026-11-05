@@ -36,7 +36,12 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
 ## Project shape
 
 - `src/md_simulations/core/` — engine-agnostic building blocks (logging, integrators,
-  equilibration, reporters, run loop). Engines depend on core, never the reverse.
+  equilibration, reporters, run loop, Beamtime tracking). Engines depend on core, never the
+  reverse.
+- Every engine's `run()` opens its Beamtime run(s) (`core/tracking.py`) and hands them to
+  `simulate()`. Hierarchy: system group → simulation run, or replica-set group → `rNN` runs.
+  Batched CGSchNet replicas use beamtime's internal `new_run`, since `beamtime.init` allows
+  one live run per process; that is why `beamtime` is pinned exactly.
 - `src/md_simulations/engines/` — one module per force field / engine, each an `Engine`
   subclass building `(topology, system, positions)`.
 - `src/md_simulations/config/` — typed pydantic config models loaded from YAML.

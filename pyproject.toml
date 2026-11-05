@@ -12,6 +12,9 @@ authors = [
 # 3.10/3.11 rather than forcing the whole project (and its consumers) to 3.12.
 requires-python = ">=3.10,<3.13"
 dependencies = [
+    # Pinned: batched CGSchNet replicas are logged through beamtime's internal run API
+    # (core/tracking.py), which a new release may change.
+    "beamtime==0.1.1",
     "openmm>=8.4.0.post2",
     "mdtraj>=1.10.3",
     "parmed>=4.3.1",

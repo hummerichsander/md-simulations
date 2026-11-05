@@ -17,6 +17,9 @@
 engine: amber
 system: trp-cage
 output_subdir: trp-cage/AMBER14_implicit_seeded_330K_r05
+beamtime:
+  group: trp-cage/AMBER14_implicit_seeded_330K
+  name: r05
 
 input_pdb: pdbs/2JOF-390Kunf-seed00.pdb
 forcefield:

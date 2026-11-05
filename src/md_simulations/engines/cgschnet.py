@@ -18,11 +18,14 @@ converted to the OpenMM convention (nm, kJ·mol⁻¹) on output."""
 import copy
 import logging
 import math
+from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
+from beamtime.sdk.run import Run
 
 from md_simulations.config import CGSchNetConfig
+from md_simulations.core import record_outputs, start_replica_runs, start_run
 from md_simulations.engines.base import Engine
 
 _KCAL_TO_KJ = 4.184
@@ -95,12 +98,21 @@ def _build_output_topology(pdb_path: Path, n_beads: int, logger: logging.Logger)
     return top
 
 
+def _replica_tag(index: int, n_replicas: int) -> str:
+    """Zero-padded replica index, e.g. ``03``.
+
+    :param index: The replica index.
+    :param n_replicas: The number of replicas.
+    :return: The index padded to at least two digits."""
+    width = max(2, len(str(n_replicas - 1)))
+    return f"{index:0{width}d}"
+
+
 def _replica_suffix(index: int, n_replicas: int) -> str:
     """Filename suffix for a replica: empty for a single replica, else zero-padded."""
     if n_replicas == 1:
         return ""
-    width = max(2, len(str(n_replicas - 1)))
-    return f"_{index:0{width}d}"
+    return f"_{_replica_tag(index, n_replicas)}"
 
 
 class _IncrementalTrajectoryWriter:
@@ -126,7 +138,8 @@ class _IncrementalTrajectoryWriter:
     :param output_freq: Steps between saved frames (for the energies step column).
     :param energy_to_kj: Factor converting the model energy unit to kJ·mol⁻¹.
     :param n_saved: Total number of valid saved frames over the whole run.
-    :param n_replicas: Number of parallel replicas (first array dimension)."""
+    :param n_replicas: Number of parallel replicas (first array dimension).
+    :param runs: One Beamtime run per replica, logged at every saved frame."""
 
     def __init__(
         self,
@@ -137,6 +150,7 @@ class _IncrementalTrajectoryWriter:
         energy_to_kj: float,
         n_saved: int,
         n_replicas: int,
+        runs: list[Run],
     ) -> None:
         import mdtraj as md
 
@@ -146,6 +160,7 @@ class _IncrementalTrajectoryWriter:
         self._energy_to_kj = energy_to_kj
         self._n_saved = n_saved
         self._n_replicas = n_replicas
+        self._runs = runs
         self._consumed = 0
         self._frames = 0
         self.last_xyz_ang: np.ndarray | None = None  # (n_replicas, N, 3)
@@ -201,6 +216,14 @@ class _IncrementalTrajectoryWriter:
                 if forces is not None:
                     for frame in forces[r]:
                         self._forces[r].write(" ".join(f"{c:g}" for c in frame.reshape(-1)) + "\n")
+                for offset in range(take):
+                    values = {}
+                    if potential is not None:
+                        values["energy/potential"] = float(potential[r, offset])
+                    if forces is not None:
+                        values["force/rms"] = float(np.sqrt(np.mean(forces[r, offset] ** 2)))
+                    step = (self._frames + offset + 1) * self._output_freq
+                    self._runs[r].log(values, step=step)
                 self._energies[r].flush()
                 self._forces[r].flush()
 
@@ -221,15 +244,45 @@ class CGSchNetEngine(Engine):
     config: CGSchNetConfig
 
     def run(self) -> Path:
+        """Run the simulation as one Beamtime run, or batched replicas as a group of runs.
+
+        :return: The output directory containing the results."""
+        cfg = self.config
+        output_dir = cfg.output_dir(self.data_root)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with ExitStack() as stack:
+            if cfg.n_replicas == 1:
+                runs = [stack.enter_context(start_run(cfg, output_dir))]
+            else:
+                names = [f"r{_replica_tag(r, cfg.n_replicas)}" for r in range(cfg.n_replicas)]
+                runs = [
+                    stack.enter_context(run) for run in start_replica_runs(cfg, output_dir, names)
+                ]
+            self.simulate(output_dir, runs)
+            for r, run in enumerate(runs):
+                sfx = _replica_suffix(r, cfg.n_replicas)
+                outputs = [
+                    f"trajectory{sfx}.dcd",
+                    f"energies{sfx}.csv",
+                    f"forces{sfx}.txt",
+                    f"initial_structure{sfx}.pdb",
+                    f"final_structure{sfx}.pdb",
+                    "simulation_summary.txt",
+                ]
+                record_outputs(run, [output_dir / name for name in outputs])
+        return output_dir
+
+    def simulate(self, output_dir: Path, runs: list[Run]) -> None:
+        """Run all replicas batched in mlcg's Langevin integrator, logging to *runs*.
+
+        :param output_dir: The directory to write into.
+        :param runs: One Beamtime run per replica."""
         _preload_nvrtc_libraries()
         import torch
 
         from mlcg.simulation import LangevinSimulation
 
         cfg = self.config
-        output_dir = cfg.output_dir(self.data_root)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
         model_path = cfg.resolve(self.data_root, cfg.model_file)
         configs_path = cfg.resolve(self.data_root, cfg.configurations_file)
 
@@ -287,7 +340,14 @@ class CGSchNetEngine(Engine):
         # trajectory/energies/forces grow during the run rather than only at the end.
         export_interval = min(cfg.num_steps, cfg.output_freq * 1000)
         writer = _IncrementalTrajectoryWriter(
-            output_dir, raw_dir, prefix, cfg.output_freq, energy_to_kj, n_saved, cfg.n_replicas
+            output_dir,
+            raw_dir,
+            prefix,
+            cfg.output_freq,
+            energy_to_kj,
+            n_saved,
+            cfg.n_replicas,
+            runs,
         )
 
         self.logger.info(
@@ -323,7 +383,6 @@ class CGSchNetEngine(Engine):
         self.logger.info(f"Trajectory output → {output_dir}")
         self.logger.info("Simulation completed successfully!")
         self.logger.info(f"Output files: {output_dir}")
-        return output_dir
 
     def _write_initial_structures(self, output_dir: Path, initial: list, topology) -> None:
         """Write each replica's starting frame (step 0) as ``initial_structure*.pdb``.

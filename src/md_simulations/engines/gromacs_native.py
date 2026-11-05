@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 from md_simulations.config import GromacsNativeConfig
-from md_simulations.core import write_gromacs_native_summary
+from md_simulations.core import record_outputs, start_run, write_gromacs_native_summary
 from md_simulations.engines.base import Engine
 
 
@@ -65,6 +65,9 @@ class GromacsNativeEngine(Engine):
         subprocess.run(full, cwd=cwd, check=True)
 
     def run(self) -> Path:
+        """Run grompp and mdrun as one Beamtime run, which captures their output.
+
+        :return: The output directory containing the results."""
         cfg = self.config
         if shutil.which(cfg.gmx) is None:
             raise RuntimeError(
@@ -74,7 +77,17 @@ class GromacsNativeEngine(Engine):
 
         output_dir = cfg.output_dir(self.data_root)
         output_dir.mkdir(parents=True, exist_ok=True)
+        with start_run(cfg, output_dir) as run:
+            self.simulate(output_dir)
+            outputs = ("md.xtc", "md.trr", "md.edr", "md.gro", "md.log", "initial_structure.pdb")
+            record_outputs(run, [output_dir / name for name in outputs])
+        return output_dir
 
+    def simulate(self, output_dir: Path) -> None:
+        """Preprocess and run the simulation with ``gmx``.
+
+        :param output_dir: The directory to write into."""
+        cfg = self.config
         gro = cfg.resolve(self.data_root, cfg.input_gro)
         top = cfg.resolve(self.data_root, cfg.top)
         mdp = cfg.resolve(self.data_root, cfg.mdp)
@@ -96,4 +109,3 @@ class GromacsNativeEngine(Engine):
 
         self.logger.info("Simulation completed successfully!")
         self.logger.info(f"Output files: {output_dir}")
-        return output_dir
