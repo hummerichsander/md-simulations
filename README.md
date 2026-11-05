@@ -24,6 +24,39 @@ Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of
 Data lives outside the repo. `MD_DATA_ROOT` (or `--data-root`) sets the root and defaults
 to `./data`; configs and generated job scripts are tracked, trajectories are not.
 
+## Experiment log
+
+Every `md-sim run` is also logged with [Beamtime](https://hummerichsander.github.io/beamtime/)
+into `beamtime/` at the project root (set in `beamtime.yaml`; the logs are not committed). A
+run records the config, the absolute output directory, energies, temperature and speed every
+`report_interval` steps (potential energy and RMS force per saved frame for `cgschnet`), the
+console output, and references to the output files, which stay on the data root. Logs are
+grouped as systems, simulations and replica sets:
+
+```
+beamtime/
+  cln/                              one group per system
+    AMBER14_implicit_stabilized_315K  a simulation is a run, named after its output folder
+    AMBER14_implicit_330K/          a replica set is a group of runs
+      r00  r01  ...
+```
+
+A config sets its place with an optional `beamtime:` block. `group` defaults to the system and
+`name` to the last part of `output_subdir`. Configs that each run one replica of a set name the
+set as their group:
+
+```yaml
+output_subdir: cln/AMBER14_implicit_330K_r01
+beamtime:
+  group: cln/AMBER14_implicit_330K
+  name: r01
+```
+
+A `cgschnet` config with `n_replicas > 1` makes this group by itself:
+`<group>/<name>/r00, r01, ...`, one run per batched replica. Those runs do not capture the
+console output, and a job killed by slurm leaves them `lost` rather than `killed`.
+`beamtime serve --open` shows the log in the browser.
+
 ## Starting a new system
 
 Copy the template for your engine — every field is commented — then edit and run:
@@ -299,6 +332,7 @@ definition.
 configs/              one YAML per system, plus templates/ and mdp/
 slurm/                generated batch scripts; output/ holds job logs
 data/                 default data root (git-ignored)
+beamtime/             experiment log (git-ignored; see beamtime.yaml)
 examples/             runnable end-to-end examples
 src/md_simulations/   the package
 ```

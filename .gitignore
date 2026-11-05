@@ -3,6 +3,7 @@ data/*
 !data/README.md
 output/
 slurm/output/
+beamtime/
 *.dcd
 *.xtc
 *.trr

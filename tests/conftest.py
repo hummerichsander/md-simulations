@@ -58,6 +58,18 @@ SAMPLE_CONFIGS: dict[str, dict] = {
     },
 }
 
+@pytest.fixture(autouse=True)
+def beamtime_logdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Send every Beamtime run a test starts to a temporary log dir, not the repo's.
+
+    :param tmp_path: Pytest temporary directory.
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :return: The temporary log dir."""
+    logdir = tmp_path / "beamtime"
+    monkeypatch.setenv("BEAMTIME_LOGDIR", str(logdir))
+    return logdir
+
+
 # Resource block merged into a sample when a config needs a SLURM section.
 SAMPLE_SLURM = {"job_name": "md-t", "partition": "a30", "gres": "gpu:1"}
 

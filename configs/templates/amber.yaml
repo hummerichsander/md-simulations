@@ -4,6 +4,9 @@ engine: amber                          # engine selector (do not change)
 system: my-system                      # short system name (shown in logs/summary)
 output_subdir: my-system/AMBER14_300K  # output directory, relative to the data root
 # data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+# beamtime:                           # optional; where the run is logged below beamtime/
+#   group: my-system/replica-set      #   default: the system; a replica set gets its own group
+#   name: r00                         #   default: the last part of output_subdir
 
 input_pdb: pdbs/input.pdb              # input structure, relative to the data root
 forcefield:                            # OpenMM force-field XML files (order matters)

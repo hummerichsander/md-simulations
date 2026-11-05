@@ -21,6 +21,14 @@ class SlurmConfig(BaseModel):
     modules: list[str] = Field(default_factory=list)
 
 
+class BeamtimeConfig(BaseModel):
+    """Where a simulation is logged below the Beamtime log dir."""
+
+    # The group the run goes into; the system by default, a replica set below it otherwise.
+    group: str | None = None
+    name: str | None = None
+
+
 class _Common(BaseModel):
     """Fields shared by every engine configuration.
 
@@ -43,6 +51,17 @@ class _Common(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     slurm: SlurmConfig | None = None
+    beamtime: BeamtimeConfig = Field(default_factory=BeamtimeConfig)
+
+    @property
+    def beamtime_group(self) -> str:
+        """The Beamtime group of the run: ``beamtime.group``, else the system."""
+        return self.beamtime.group or self.system
+
+    @property
+    def beamtime_name(self) -> str:
+        """The Beamtime run name: ``beamtime.name``, else the last part of ``output_subdir``."""
+        return self.beamtime.name or Path(self.output_subdir).name
 
     def resolve(self, data_root: Path, path: str) -> Path:
         """Resolve *path* against *data_root* (absolute paths pass through).

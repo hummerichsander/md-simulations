@@ -4,6 +4,9 @@ engine: martini                        # engine selector (do not change)
 system: my-cg                          # short system name (shown in logs/summary)
 output_subdir: my-cg/MARTINI_300K      # output directory, relative to the data root
 # data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+# beamtime:                           # optional; where the run is logged below beamtime/
+#   group: my-system/replica-set      #   default: the system; a replica set gets its own group
+#   name: r00                         #   default: the last part of output_subdir
 
 input_gro: my-cg/solvated.gro          # CG coordinates (GRO), relative to data root
 top: my-cg/system.top                  # GROMACS topology (TOP), relative to data root

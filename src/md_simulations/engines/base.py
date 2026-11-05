@@ -6,14 +6,28 @@ from pathlib import Path
 import openmm
 import openmm.app as app
 import openmm.unit as unit
+from beamtime.sdk.run import Run
 
 from md_simulations.core import (
+    BeamtimeReporter,
     add_standard_reporters,
     create_integrator,
+    record_outputs,
     run_simulation_loop,
     save_final_structure,
     save_initial_structure,
+    start_run,
     write_simulation_summary,
+)
+
+# The files every OpenMM engine writes, referenced from its Beamtime run.
+OUTPUT_FILES = (
+    "trajectory.dcd",
+    "energies.csv",
+    "forces.txt",
+    "initial_structure.pdb",
+    "final_structure.pdb",
+    "simulation_summary.txt",
 )
 
 
@@ -69,10 +83,22 @@ class OpenMMEngine(Engine):
         raise NotImplementedError
 
     def run(self) -> Path:
-        cfg = self.config
-        output_dir = cfg.output_dir(self.data_root)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        """Run the simulation as one Beamtime run.
 
+        :return: The output directory containing the results."""
+        output_dir = self.config.output_dir(self.data_root)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with start_run(self.config, output_dir) as run:
+            self.simulate(output_dir, run)
+            record_outputs(run, [output_dir / name for name in OUTPUT_FILES])
+        return output_dir
+
+    def simulate(self, output_dir: Path, run: Run) -> None:
+        """Build, minimise, equilibrate and run the simulation, logging to *run*.
+
+        :param output_dir: The directory to write into.
+        :param run: The Beamtime run."""
+        cfg = self.config
         built = self.build_system()
 
         integrator = create_integrator(
@@ -107,6 +133,7 @@ class OpenMMEngine(Engine):
             num_steps=cfg.num_steps,
             logger=self.logger,
         )
+        simulation.reporters.append(BeamtimeReporter(run=run, report_interval=cfg.report_interval))
 
         self.logger.info(
             f"Running {cfg.engine} MD for {cfg.num_steps:,} steps "
@@ -118,4 +145,3 @@ class OpenMMEngine(Engine):
 
         self.logger.info("Simulation completed successfully!")
         self.logger.info(f"Output files: {output_dir}")
-        return output_dir

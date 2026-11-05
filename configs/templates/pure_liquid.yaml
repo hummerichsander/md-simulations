@@ -4,6 +4,9 @@ engine: pure_liquid                    # engine selector (do not change)
 system: my-liquid                      # short system name (shown in logs/summary)
 output_subdir: my-liquid/CHARMM36_300K # output directory, relative to the data root
 # data_root: /path/to/data             # optional; else use --data-root or MD_DATA_ROOT
+# beamtime:                           # optional; where the run is logged below beamtime/
+#   group: my-system/replica-set      #   default: the system; a replica set gets its own group
+#   name: r00                         #   default: the last part of output_subdir
 
 input_pdb: my-liquid/box.pdb          # pre-built periodic-box PDB, relative to data root
 forcefield:                            # OpenMM force-field XML files
