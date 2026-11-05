@@ -32,6 +32,13 @@
 # Every axis is env-overridable and space-separated: SYSTEMS (default "2 3 5 8"), REPLICAS
 # (default "1 2 3"). The H-resampling follow-up seeds replica k with 42 + k (see
 # resample-h-bonds-alaX.sh). r0 is never part of this script.
+#
+# At most MAX_PARALLEL (default 3) of these GPU jobs run at once, so the cluster is not flooded.
+# The jobs are dealt round-robin onto MAX_PARALLEL lanes, and each job waits (pending, no GPU held)
+# for the previous job of its lane with afterany, so a failed replica does not stall its lane. With
+# the default axes lane k carries replica k through ala2, ala3, ala5, ala8: the three replicas of a
+# length run side by side and the lanes finish together. The (CPU-only) resampling jobs are not
+# limited. Only these jobs are counted, not other jobs you have in the queue.
 
 set -euo pipefail
 
@@ -46,6 +53,7 @@ if [[ -z ${CONFIG:-} ]]; then
     SYSTEMS="${SYSTEMS:-2 3 5 8}"
     REPLICAS="${REPLICAS:-1 2 3}"
     NO_RESAMPLE="${NO_RESAMPLE:-0}"
+    MAX_PARALLEL="${MAX_PARALLEL:-3}"
     SELF="slurm/alaX-amber14-implicit-330K-replicas.sh"
 
     DRY_RUN=0
@@ -54,6 +62,8 @@ if [[ -z ${CONFIG:-} ]]; then
     # A value of a top-level `slurm:` key in a config (the keys are indented two spaces).
     slurm_key() { awk -v key="$2:" '$1 == key { print $2 }' "$1"; }
 
+    lane_last=()   # per lane, the id of the job submitted last
+    count=0
     for n in $SYSTEMS; do
         ids=()
         for k in $REPLICAS; do
@@ -61,15 +71,20 @@ if [[ -z ${CONFIG:-} ]]; then
             [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
             job="$(slurm_key "$config" job_name)"
             time="$(slurm_key "$config" time)"
-            cmd=(sbatch --parsable "--job-name=${job}" "--time=${time}" "--export=ALL,CONFIG=${config}" "$SELF")
+            lane=$(( count % MAX_PARALLEL ))
+            count=$(( count + 1 ))
+            cmd=(sbatch --parsable "--job-name=${job}" "--time=${time}" "--export=ALL,CONFIG=${config}")
+            [[ -n ${lane_last[$lane]:-} ]] && cmd+=("--dependency=afterany:${lane_last[$lane]}")
+            cmd+=("$SELF")
             if (( DRY_RUN )); then
-                echo "${cmd[*]}   # -> <jobid:ala${n}-r${k}>"
-                ids+=("<jobid:ala${n}-r${k}>")
+                id="<jobid:ala${n}-r${k}>"
+                echo "${cmd[*]}   # lane ${lane} -> ${id}"
             else
                 id="$("${cmd[@]}")"
-                echo "ala${n} r${k}: job ${id}"
-                ids+=("$id")
+                echo "ala${n} r${k}: job ${id} (lane ${lane})"
             fi
+            ids+=("$id")
+            lane_last[$lane]="$id"
         done
 
         (( NO_RESAMPLE )) && continue
