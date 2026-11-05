@@ -17,6 +17,7 @@ converted to the OpenMM convention (nm, kJ·mol⁻¹) on output."""
 
 import copy
 import logging
+import math
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,19 @@ _KCAL_TO_KJ = 4.184
 _ANG_TO_NM = 0.1
 # Boltzmann constant in the model's energy unit, per kelvin.
 _KB = {"kcal/mol": 0.0019872041, "kJ/mol": 0.00831446261815324}
+# mlcg integrates in sqrt(amu A^2 / energy unit), in ps: 0.1 for kJ/mol, 48.89 fs for kcal/mol.
+_TIME_UNIT_PS = {"kcal/mol": 0.1 / math.sqrt(_KCAL_TO_KJ), "kJ/mol": 0.1}
+
+
+def mlcg_time_units(timestep: float, friction: float, energy_unit: str) -> tuple[float, float]:
+    """Convert a timestep in ps and a friction in 1/ps to mlcg's internal time unit.
+
+    :param timestep: Integration step in ps.
+    :param friction: Langevin friction in 1/ps.
+    :param energy_unit: The model's energy unit, which fixes mlcg's time unit.
+    :return: ``(dt, friction)`` in mlcg's units."""
+    unit = _TIME_UNIT_PS[energy_unit]
+    return timestep / unit, friction * unit
 
 
 def _preload_nvrtc_libraries() -> None:
@@ -261,6 +275,7 @@ class CGSchNetEngine(Engine):
         self._write_summary(output_dir)
 
         beta = 1.0 / (_KB[cfg.model_energy_unit] * cfg.temperature)
+        dt, friction = mlcg_time_units(cfg.timestep, cfg.friction, cfg.model_energy_unit)
         n_saved = cfg.num_steps // cfg.output_freq
         raw_dir = output_dir / "_mlcg_raw"
         raw_dir.mkdir(exist_ok=True)
@@ -285,8 +300,8 @@ class CGSchNetEngine(Engine):
         # doesn't leak open file handles.
         try:
             simulation = LangevinSimulation(
-                friction=cfg.friction,
-                dt=cfg.timestep,
+                friction=friction,
+                dt=dt,
                 n_timesteps=cfg.num_steps,
                 save_interval=cfg.output_freq,
                 save_forces=True,

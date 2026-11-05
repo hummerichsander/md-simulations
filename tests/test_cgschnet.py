@@ -127,3 +127,15 @@ def test_cgschnet_dispatch() -> None:
 
     engine = build_engine(_config(), Path("/data"), logging.getLogger("test"))
     assert isinstance(engine, CGSchNetEngine)
+
+
+def test_mlcg_time_units() -> None:
+    """One AKMA time unit is 48.89 fs in kcal/mol and 100 fs in kJ/mol; friction scales inversely.
+
+    :return: None."""
+    from md_simulations.engines.cgschnet import mlcg_time_units
+
+    dt, friction = mlcg_time_units(0.04888821, 1.0, "kcal/mol")
+    assert dt == pytest.approx(1.0, rel=1e-6)
+    assert friction == pytest.approx(0.04888821, rel=1e-6)
+    assert mlcg_time_units(0.002, 1.0, "kJ/mol") == pytest.approx((0.02, 0.1))
