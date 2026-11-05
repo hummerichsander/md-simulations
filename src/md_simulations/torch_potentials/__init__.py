@@ -9,6 +9,9 @@ are torch tensors in nm / kJ.mol^-1; ASE is an internal implementation detail.
   point: a differentiable potential straight from a simulation config.
 - :func:`build_potential_terms` / :func:`build_potential_terms_from_file` -- the
   same energy split into one potential per OpenMM force, for diagnostics.
+- :func:`build_resampled_bond_potential_from_file` -- the exact density of a
+  trajectory whose constrained bonds ``resample_h_bonds`` redrew
+  (:class:`ResampledBondPotential`).
 - :func:`build_calculator` / :func:`build_calculator_from_file` -- the ASE
   calculator alone, for callers that do not want torch.
 - :class:`Potential` -- the differentiable, ASE-engine-backed potential.
@@ -45,6 +48,7 @@ __all__ = [
     "CGSchNetPotential",
     "Potential",
     "PotentialLike",
+    "ResampledBondPotential",
     "batched_potential_energy",
     "build_calculator",
     "build_calculator_from_file",
@@ -52,6 +56,7 @@ __all__ = [
     "build_potential_from_file",
     "build_potential_terms",
     "build_potential_terms_from_file",
+    "build_resampled_bond_potential_from_file",
 ]
 
 # Names whose modules import torch. Kept out of the eager import above so a
@@ -62,6 +67,14 @@ __all__ = [
 _LAZY: dict[str, tuple[str, str]] = {
     "CGSchNetPotential": ("md_simulations.torch_potentials.cgschnet", "CGSchNetPotential"),
     "Potential": ("md_simulations.torch_potentials.potential", "Potential"),
+    "ResampledBondPotential": (
+        "md_simulations.torch_potentials.resampled",
+        "ResampledBondPotential",
+    ),
+    "build_resampled_bond_potential_from_file": (
+        "md_simulations.torch_potentials.resampled",
+        "build_resampled_bond_potential_from_file",
+    ),
     "batched_potential_energy": (
         "md_simulations.torch_potentials.batch",
         "batched_potential_energy",
