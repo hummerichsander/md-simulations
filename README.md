@@ -89,7 +89,7 @@ and output files, so the table is mostly about what inputs each needs.
 | `gromacs_input` | OpenMM built straight from GROMACS inputs (e.g. FreeSolv) | `.gro`, `.top` | — |
 | `awsem` | OpenAWSEM 3-bead CG, optionally memory-biased | all-atom PDB | `--extra awsem` |
 | `gromacs_native` | real `gmx grompp` + `gmx mdrun` | `.gro`, `.top`, `.mdp` | `gmx` on PATH |
-| `cgschnet` | ML coarse-grained (CGSchNet / mlcg) | see below | `--extra cgschnet` |
+| `cgschnet` | ML coarse-grained (CGSchNet / mlcg) | see below | `--extra cgschnet` (+ `--extra cu130`) |
 
 Two behave a little differently from the rest. `awsem` will convert an all-atom PDB to CG
 for you with `prepare: true`. `gromacs_native` takes its run parameters from the `.mdp`
@@ -104,15 +104,17 @@ not TorchScriptable, so it can't go through OpenMM-Torch. Dynamics come from mlc
 Langevin integrator instead, with the output converted into the usual files (the model
 works in Å and kcal/mol; you still get nm and kJ/mol).
 
-mlcg pins Python 3.12, which is why the whole project targets 3.12. The extra mirrors
-mlcg's CUDA-13 wheel setup:
+mlcg pins Python 3.12, which is why the whole project targets 3.12. The `cgschnet` extra
+is plain `mlcg` and leaves the CUDA line alone; the CUDA-13 wheel set that matches the
+cluster is the separate `cu130` extra:
 
 ```bash
-uv sync --extra cgschnet
+uv sync --extra cgschnet --extra cu130 --torch-backend=cu130
 ```
 
-On a CUDA-12 host, switch the `cu130`/`cuda13` markers in `pyproject.toml` to
-`cu128`/`cuda12`. Jobs activate the same `.venv` as every other engine.
+On a CUDA-12 host, drop `--extra cu130` and install torch with `--torch-backend=cu128`.
+A project that consumes md-simulations and pins its own torch takes `--extra cgschnet`
+alone. Jobs activate the same `.venv` as every other engine.
 
 The released checkpoint was pickled against a pre-2.5 torch-geometric and won't load as-is,
 so re-export it once:
@@ -144,7 +146,7 @@ which needs coarse-grained coordinates paired with the forces that belong to the
 Projecting coordinates is easy; projecting forces is where people lose an afternoon:
 
 ```bash
-uv sync --extra cgschnet-dataset
+uv sync --extra cgschnet-dataset --extra cu130 --torch-backend=cu130
 md-sim-cgschnet-dataset --run data/trp-cage/AMBER14_implicit_300K \
     --bead-pdb data/pdbs/2JOF_5B-CG.pdb --out data/trp-cage/fm_300K \
     --cgschnet-config configs/trpcage-cgschnet-300K.yaml --name trpcage
@@ -246,8 +248,11 @@ rather than an ASE wrapper (`build_calculator` raises here). Both satisfy the sa
 `PotentialLike` protocol, so callers can't tell.
 
 ```bash
-uv sync --extra cgschnet-potentials
+uv sync --extra cgschnet-potentials --extra cu130 --torch-backend=cu130
 ```
+
+(`cu130` only when md-simulations is the top-level project; a consumer with its own torch
+pin takes `--extra cgschnet-potentials` alone.)
 
 ```python
 pot = build_potential_from_file(

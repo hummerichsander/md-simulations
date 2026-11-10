@@ -34,18 +34,24 @@ awsem = ["openawsem"]
 martini = ["vermouth>=0.15.0", "insane>=1.2.0"]
 # gromacs: requires an external `gmx` binary on PATH (module load gromacs/...).
 gromacs = []
-# ML coarse-grained (CGSchNet / Clementi-group mlcg) via OpenMM-Torch.
-# openmm-torch now ships PyPI wheels, so this is a fully uv-resolvable extra.
-# mlcg pins Python ==3.12.*, so the dependency is marker-gated to 3.12 and this
-# extra resolves to nothing on 3.10/3.11 (use a 3.12 env for cgschnet).
-# The CUDA-13 build matches the cluster's cuda/13.0; on a CUDA-12 host use
-# openmmtorch[cuda12] instead, and install torch with the matching backend
-# (e.g. `uv sync --extra cgschnet --torch-backend=cu130`).
+# ML coarse-grained (CGSchNet / Clementi-group mlcg). Dynamics run via mlcg's own
+# Langevin integrator, so mlcg is the only requirement. mlcg pins Python ==3.12.*,
+# so the dependency is marker-gated and this extra resolves to nothing on 3.10/3.11
+# (use a 3.12 env for cgschnet).
+# Deliberately plain `mlcg`, NOT `mlcg[cu130]`: the cu130 extra pins torch==2.11.0
+# and routes torch-cluster + cuequivariance through the CUDA-13 wheel indexes, which
+# fights any consumer that pins its own torch. The CUDA line is a separate opt-in --
+# see the `cu130` extra below.
 cgschnet = [
-    # Dynamics run via mlcg's own Langevin integrator (not OpenMM-Torch), so the
-    # only requirement is mlcg. Its cu130 extra pins torch==2.11.0 and pulls
-    # torch-cluster + cuequivariance from the PyG/pytorch CUDA-13 wheel indexes
-    # configured under [tool.uv] below.
+    "mlcg; python_full_version >= '3.12'",
+]
+# The CUDA-13 wheel set for the cgschnet stack, matching the cluster's cuda/13.0.
+# Orthogonal to the cgschnet extras: add it when this project *is* the top-level one
+# and needs the CUDA-13 torch, and install torch with the matching backend
+# (`uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`). It needs the
+# [tool.uv] index setup below. A consumer that pins its own torch takes `cgschnet`
+# alone and keeps its CUDA line.
+cu130 = [
     "mlcg[cu130]; python_full_version >= '3.12'",
 ]
 viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
@@ -54,18 +60,19 @@ analysis = ["deeptime>=0.4.4", "scipy>=1.11"]
 # Differentiable torch potentials built from a config (see
 # md_simulations.torch_potentials). openmm is already a core dep, so
 # OpenMMCalculator needs nothing extra; ase supplies the engine-agnostic
-# calculator contract and torch the autograd bridge. NOTE: `torch` resolves from
-# the cu130 index configured under [tool.uv]; on a CPU-only host install with
-# `uv sync --extra torch-potentials --torch-backend=cpu`.
+# calculator contract and torch the autograd bridge. `torch` is deliberately not
+# pinned to an index (see [tool.uv.sources]), so it resolves from PyPI unless the
+# top-level project says otherwise -- e.g. `--torch-backend=cu130` or `=cpu`.
 torch-potentials = ["torch>=2.0", "ase>=3.22"]
 # The differentiable CG potential (md_simulations.torch_potentials.cgschnet) needs
 # both halves: mlcg to unpickle and run the model, torch/ase for the rest of the
 # package. mlcg pins Python ==3.12.*, so its half is marker-gated and this extra
 # degrades to plain torch-potentials on 3.10/3.11 -- where CGSchNetPotential simply
-# cannot be built. Same CUDA-13 caveat as the `cgschnet` extra.
+# cannot be built. Plain mlcg, so a consumer keeps its own torch; add `cu130` for
+# the CUDA-13 stack.
 cgschnet-potentials = [
     "md-simulations[torch-potentials]",
-    "mlcg[cu130]; python_full_version >= '3.12'",
+    "md-simulations[cgschnet]",
 ]
 # Building a CGSchNet force-matching dataset (md_simulations.prep.cgschnet_dataset):
 # aggforce fits the AA->CG force map, h5py writes the dataset mlcg trains from, and
@@ -76,12 +83,12 @@ cgschnet-dataset = [
     "md-simulations[cgschnet-potentials]",
     "h5py>=3.10",
 ]
-# Everything at once. NOTE: `all` includes `cgschnet`, so it inherits the heavy
-# CUDA-13 torch stack and needs the [tool.uv] cu130 index setup below (and a
-# CUDA-13 host, or `--torch-backend` override) -- same constraint the standalone
-# `cgschnet` extra carries.
+# Everything at once. NOTE: `all` includes `cu130`, so it inherits the heavy CUDA-13
+# torch stack and needs the [tool.uv] cu130 index setup below (and a CUDA-13 host, or
+# a `--torch-backend` override) -- same constraint the standalone `cu130` extra
+# carries. Drop `cu130` from the list to keep a different CUDA line.
 all = [
-    "md-simulations[awsem,martini,gromacs,cgschnet,viz,analysis,torch-potentials]",
+    "md-simulations[awsem,martini,gromacs,cgschnet,cu130,viz,analysis,torch-potentials]",
 ]
 
 [project.urls]
@@ -137,16 +144,17 @@ index-strategy = "unsafe-best-match"
 # openawsem therefore resolves from PyPI by default. See the `awsem` extra above
 # for the patch that release is missing.
 mlcg = { git = "https://github.com/ClementiGroup/mlcg.git" }
-# CUDA-13 wheels for the cgschnet stack (mirrors mlcg's cu130 setup, which uv
-# does not inherit from a dependency).
+# CUDA-13 wheels for the `cu130` extra (mirrors mlcg's cu130 setup, which uv does
+# not inherit from a dependency).
 # Deliberately NO torch / torch-cluster index pins. uv applies a git dependency's
 # own [tool.uv.sources], so pinning torch to the cu130 index here forced that CUDA
 # line on every consumer -- and mixing it with PyPI-resolved nvidia-* wheels yields
 # an inconsistent stack (missing libcudnn.so.9 / libcusparseLt.so.0, i.e. `import
-# torch` fails outright). The CUDA line is the top-level project's call: for the
-# cgschnet extra install with `uv sync --extra cgschnet --torch-backend=cu130`, or
-# add the pins below to your own project. The index definitions are kept (explicit,
-# so they are only consulted when something is pinned to them).
+# torch` fails outright). The CUDA line is the top-level project's call: here, install
+# with `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer that
+# pins its own torch takes `cgschnet` without `cu130` and adds its own index pins. The
+# index definitions are kept (explicit, so they are only consulted when something is
+# pinned to them).
 
 [[tool.uv.index]]
 name = "torch-cu130"

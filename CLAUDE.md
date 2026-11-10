@@ -7,6 +7,13 @@ overrides for this project:
   family; `cgschnet`, `cgschnet-potentials` and `cgschnet-dataset` all pull `mlcg`,
   which needs 3.12 (marker-gated, so it is unavailable on 3.10/3.11). The dev env
   (`.python-version`) is 3.12 so all three are available.
+- The `cgschnet` extras depend on **plain `mlcg`** and leave the CUDA line to the
+  top-level project; `mlcg[cu130]` (torch 2.11 + the CUDA-13 wheel indexes) is the
+  separate, orthogonal `cu130` extra. Locally that means
+  `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer pinning
+  its own torch (e.g. split-flows at torch 2.9.1/cu128) takes `cgschnet` alone. Never
+  put `mlcg[cu130]` back into a `cgschnet*` extra — that coupling is what forced
+  split-flows into a second venv.
 - Typical third-party imports are `numpy`, `openmm`, `mdtraj`; internal ones are
   `from md_simulations.core import ...`, `from md_simulations.config import ...`:
 
