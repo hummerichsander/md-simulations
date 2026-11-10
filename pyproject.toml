@@ -143,7 +143,15 @@ index-strategy = "unsafe-best-match"
 # project's own openawsem source ("conflicting URLs for package openawsem").
 # openawsem therefore resolves from PyPI by default. See the `awsem` extra above
 # for the patch that release is missing.
-mlcg = { git = "https://github.com/ClementiGroup/mlcg.git" }
+# Pinned, and the pin MUST stay byte-identical to every consumer's own entry. uv
+# applies a git dependency's own [tool.uv.sources], and two different URLs for one
+# package is a hard error, not "parent wins" ("conflicting URLs for package `mlcg`")
+# -- the same trap documented for openawsem above. An unpinned URL here collided with
+# split-flows' pinned one. The revision is also what this project's lock already
+# resolved; mlcg's default branch has since moved to 0.2.1 (torch==2.13.0), so the pin
+# is load-bearing in its own right -- the CGSchNet checkpoints are pickled against this
+# mlcg/torch-geometric pair. Bump it here and in every consumer in the same change.
+mlcg = { git = "https://github.com/ClementiGroup/mlcg.git", rev = "b0162fe8604e2a14972e2906957ab8444a310a43" }
 # CUDA-13 wheels for the `cu130` extra (mirrors mlcg's cu130 setup, which uv does
 # not inherit from a dependency).
 # Deliberately NO torch / torch-cluster index pins. uv applies a git dependency's
