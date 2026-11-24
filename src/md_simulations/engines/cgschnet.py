@@ -5,7 +5,7 @@ from Charron et al., Nat. Chem. 2025) consumes ``mlcg.AtomicData`` and is not
 TorchScriptable, so it cannot be run through OpenMM-Torch (whose ``TorchForce``
 executes TorchScript in a Python-free C++ context). Instead this engine drives
 dynamics with mlcg's own Langevin integrator, then converts its output into the
-same ``trajectory.dcd`` / ``energies.csv`` / ``forces.txt`` / PDB / summary files
+same ``trajectory.dcd`` / ``energies.csv`` / ``forces.npy`` / PDB / summary files
 every other engine produces.
 
 Two non-obvious requirements (see ``md-sim-cgschnet-reexport`` and the module
@@ -26,6 +26,7 @@ from beamtime.sdk.run import Run
 
 from md_simulations.config import CGSchNetConfig
 from md_simulations.core import record_outputs, start_replica_runs, start_run
+from md_simulations.core.forces import ForceWriter
 from md_simulations.engines.base import Engine
 
 _KCAL_TO_KJ = 4.184
@@ -122,7 +123,7 @@ class _IncrementalTrajectoryWriter:
     ``export_interval`` steps and then calls this as its ``save_subroutine``.
     Each call appends any newly-written chunk to per-replica ``trajectory.dcd``
     (via mdtraj's incremental DCD writer, in the model's native Ångström),
-    ``energies.csv`` and ``forces.txt`` — so output grows as the simulation
+    ``energies.csv`` and ``forces.npy`` — so output grows as the simulation
     proceeds instead of only at the end. With multiple replicas each gets its own
     suffixed files; a single replica keeps the plain names. mlcg's final remainder
     ``write()`` does not trigger the hook, so :meth:`close` must be called
@@ -165,7 +166,10 @@ class _IncrementalTrajectoryWriter:
         self._frames = 0
         self.last_xyz_ang: np.ndarray | None = None  # (n_replicas, N, 3)
 
-        self._dcd, self._energies, self._forces = [], [], []
+        self._dcd, self._energies = [], []
+        # The bead count only shows up with the first chunk, so the force writers are lazy.
+        self._force_paths: list[Path] = []
+        self._forces: list[ForceWriter | None] = [None] * n_replicas
         for r in range(n_replicas):
             sfx = _replica_suffix(r, n_replicas)
             self._dcd.append(
@@ -174,7 +178,7 @@ class _IncrementalTrajectoryWriter:
             energies = open(output_dir / f"energies{sfx}.csv", "w")
             energies.write('#"Step","Potential Energy (kJ/mole)"\n')
             self._energies.append(energies)
-            self._forces.append(open(output_dir / f"forces{sfx}.txt", "w"))
+            self._force_paths.append(output_dir / f"forces{sfx}.npy")
 
     def __call__(self, data=None, frame_index=None) -> None:
         """mlcg ``save_subroutine`` hook — flush chunks written since the last call."""
@@ -214,8 +218,9 @@ class _IncrementalTrajectoryWriter:
                         step = (self._frames + offset + 1) * self._output_freq
                         self._energies[r].write(f"{step},{energy}\n")
                 if forces is not None:
-                    for frame in forces[r]:
-                        self._forces[r].write(" ".join(f"{c:g}" for c in frame.reshape(-1)) + "\n")
+                    if self._forces[r] is None:
+                        self._forces[r] = ForceWriter(self._force_paths[r], forces.shape[2])
+                    self._forces[r].write(forces[r])
                 for offset in range(take):
                     values = {}
                     if potential is not None:
@@ -225,7 +230,6 @@ class _IncrementalTrajectoryWriter:
                     step = (self._frames + offset + 1) * self._output_freq
                     self._runs[r].log(values, step=step)
                 self._energies[r].flush()
-                self._forces[r].flush()
 
             self._frames += take
 
@@ -235,7 +239,8 @@ class _IncrementalTrajectoryWriter:
         for r in range(self._n_replicas):
             self._dcd[r].close()
             self._energies[r].close()
-            self._forces[r].close()
+            if self._forces[r] is not None:
+                self._forces[r].close()
 
 
 class CGSchNetEngine(Engine):

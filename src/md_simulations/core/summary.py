@@ -6,6 +6,8 @@ import openmm
 import openmm.app as app
 import openmm.unit as unit
 
+from md_simulations.core.tracking import degrees_of_freedom
+
 SUMMARY_FILENAME = "simulation_summary.txt"
 
 _NONBONDED_METHODS = {
@@ -69,6 +71,11 @@ def _inspect_system(simulation: app.Simulation) -> dict:
     info: dict = {
         "n_particles": system.getNumParticles(),
         "n_constraints": system.getNumConstraints(),
+        "n_frozen": sum(
+            system.getParticleMass(i).value_in_unit(unit.dalton) == 0.0
+            for i in range(system.getNumParticles())
+        ),
+        "dof": degrees_of_freedom(system),
     }
 
     barostat = None
@@ -112,6 +119,7 @@ def write_simulation_summary(
     config,
     simulation: app.Simulation,
     logger: logging.Logger | None = None,
+    extra_sections: dict[str, list[tuple[str, str]]] | None = None,
 ) -> Path:
     """Write a concise, publication-oriented parameter summary for an OpenMM run.
 
@@ -123,6 +131,7 @@ def write_simulation_summary(
     :param config: The engine-specific config model.
     :param simulation: The built simulation (positions/box already set).
     :param logger: Optional logger for a confirmation message.
+    :param extra_sections: Further titled key/value sections appended after the standard ones.
     :return: Path to the written summary file."""
     _log = logger or logging.getLogger(__name__)
     info = _inspect_system(simulation)
@@ -157,6 +166,13 @@ def write_simulation_summary(
                 f"{config.salt_conc} mol/L" if getattr(config, "salt_conc", 0.0) else None,
             ),
             ("Particles", f"{info['n_particles']:,}"),
+            (
+                "Frozen particles",
+                f"{info['n_frozen']:,} (mass 0; the run samples the conditional of the rest)"
+                if info["n_frozen"]
+                else None,
+            ),
+            ("Degrees of freedom", f"{info['dof']:,}"),
             ("Constraints", f"{info['n_constraints']:,}"),
             ("Periodic", "yes" if box else "no"),
             ("Initial box", box_str),
@@ -191,10 +207,22 @@ def write_simulation_summary(
             ("Trajectory frames", f"{frames:,}"),
             (
                 "Outputs",
-                "trajectory.dcd, energies.csv, forces.txt, initial_structure.pdb, final_structure.pdb",
+                ", ".join(
+                    name
+                    for name in (
+                        "trajectory.dcd",
+                        "energies.csv",
+                        "forces.npy" if getattr(config, "write_forces", True) else None,
+                        "initial_structure.pdb",
+                        "final_structure.pdb",
+                    )
+                    if name
+                ),
             ),
         ],
     }
+
+    sections |= extra_sections or {}
 
     path = output_dir / SUMMARY_FILENAME
     path.write_text(_render(f"{config.system} ({config.engine})", sections), encoding="utf-8")

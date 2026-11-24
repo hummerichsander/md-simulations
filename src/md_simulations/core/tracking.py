@@ -9,7 +9,7 @@ import openmm
 import openmm.app as app
 import openmm.unit as unit
 from beamtime.sdk.paths import locate
-from beamtime.sdk.run import Run, new_run, to_proposal
+from beamtime.sdk.run import Run, continue_run, new_run, to_proposal
 
 _R = unit.MOLAR_GAS_CONSTANT_R.value_in_unit(unit.kilojoule_per_mole / unit.kelvin)
 
@@ -55,6 +55,45 @@ def start_replica_runs(config: Any, output_dir: Path, names: list[str]) -> list[
         run.start()
         runs.append(run)
     return runs
+
+
+def resume_replica_runs(
+    config: Any, output_dir: Path, names: list[str], run_ids: list[str], step: int
+) -> list[Run]:
+    """Continue the runs :func:`start_replica_runs` made, for a simulation resumed from a checkpoint.
+
+    Each run gets a new attempt that resumes at ``step + 1``: Beamtime then supersedes the rows its
+    killed attempt logged after the checkpoint. A run that can no longer be found is started anew.
+
+    :param config: The simulation config.
+    :param output_dir: The directory the simulation writes into.
+    :param names: One run name per replica, used only for runs that have to be started anew.
+    :param run_ids: The id of each run, as recorded in the checkpoint.
+    :param step: The checkpointed step.
+    :return: The started runs; use each as a context manager to record failures."""
+    location = locate(f"{config.beamtime_group}/{config.beamtime_name}")
+    runs = []
+    for i, (name, run_id) in enumerate(zip(names, run_ids)):
+        cfg = run_config(config, output_dir) | {"replica_index": i}
+        try:
+            run = continue_run(location.logdir, run_id, cfg)
+        except LookupError:
+            run = new_run(location, name, [config.engine], cfg, to_proposal(None))
+            run.start()
+        else:
+            run.start()
+            run.guard("resume", run.settle, step + 1)
+        runs.append(run)
+    return runs
+
+
+def kinetic_temperature(kinetic: float, dof: int) -> float:
+    """Convert a kinetic energy into the temperature it corresponds to.
+
+    :param kinetic: Kinetic energy in kJ/mol.
+    :param dof: Degrees of freedom, see :func:`degrees_of_freedom`.
+    :return: The temperature in Kelvin, 0 without degrees of freedom."""
+    return 2.0 * kinetic / (dof * _R) if dof > 0 else 0.0
 
 
 def record_outputs(run: Run, paths: list[Path]) -> None:
@@ -120,7 +159,7 @@ class BeamtimeReporter:
             "energy/potential": potential,
             "energy/kinetic": kinetic,
             "energy/total": potential + kinetic,
-            "temperature": 2.0 * kinetic / (self.dof * _R) if self.dof > 0 else 0.0,
+            "temperature": kinetic_temperature(kinetic, self.dof),
         }
 
         now, ps = time.time(), state.getTime().value_in_unit(unit.picosecond)

@@ -30,7 +30,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
     )
     logger.info("=" * 60)
 
-    engine = build_engine(config, data_root, logger)
+    if args.resume and config.replica_exchange is None:
+        logger.error("--resume needs a config with a replica_exchange block.")
+        sys.exit(1)
+
+    engine = build_engine(config, data_root, logger, resume=args.resume)
     try:
         engine.run()
     except Exception as e:
@@ -67,6 +71,11 @@ def main() -> None:
         "--data-root",
         default=None,
         help="Root directory for inputs/outputs (overrides MD_DATA_ROOT and config).",
+    )
+    p_run.add_argument(
+        "--resume",
+        action="store_true",
+        help="Continue a replica-exchange run from its checkpoint (same platform as the original).",
     )
     p_run.set_defaults(func=_cmd_run)
 
