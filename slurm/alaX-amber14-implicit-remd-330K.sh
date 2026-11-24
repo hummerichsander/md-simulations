@@ -141,6 +141,41 @@ args=("$CONFIG")
 [[ ${RESUME:-0} == 1 ]] && args+=(--resume)
 
 echo "=== ${CONFIG} ${args[*]:1} ==="
-md-sim run "${args[@]}"
+
+# Invoked as a module, not through the `md-sim` console script -- the same reason
+# slurm/equilibrate-h-bonds.sh does it. The wrapper in .venv/bin is written at install time
+# (2026-11-20 here), so it is the one part of an editable checkout that is a snapshot rather
+# than live. Three `--resume` chains died in under a second with
+#
+#     md-sim: error: unrecognized arguments: --resume
+#
+# while `md-sim run --help` on the submit node showed the flag, i.e. the node resolved a
+# different md_simulations than the working tree. `python -m` goes through the interpreter the
+# venv already pins and the .pth that points at src/, with nothing written at install time in
+# between.
+#
+# The check below is deliberately before the simulation rather than after a failure: a resume
+# that cannot parse its own flag should cost a second, not a GPU slot, and it names what the
+# *node* sees, which is the thing a submit-side preflight cannot tell you.
+if [[ ${RESUME:-0} == 1 ]] && ! python -m md_simulations.cli run --help 2>/dev/null | grep -q -- '--resume'; then
+    echo "error: this node's md_simulations has no --resume." >&2
+    echo "  host       = $(hostname)" >&2
+    echo "  cwd        = $PWD" >&2
+    echo "  python     = $(command -v python)" >&2
+    echo "  md-sim     = $(command -v md-sim || echo '<not on PATH>')" >&2
+    echo "  VIRTUAL_ENV= ${VIRTUAL_ENV:-<unset>}" >&2
+    echo "  PYTHONPATH = ${PYTHONPATH:-<unset>}" >&2
+    python - >&2 <<'PY'
+import md_simulations.cli as c, sys
+print(f"  module     = {c.__file__}")
+print(f"  has resume = {'--resume' in open(c.__file__).read()}")
+print("  sys.path   =")
+for entry in sys.path:
+    print(f"      {entry}")
+PY
+    exit 1
+fi
+
+python -m md_simulations.cli run "${args[@]}"
 
 echo "Finished ${CONFIG}."
