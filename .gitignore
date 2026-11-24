@@ -28,5 +28,19 @@ __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
 
+# Crash and shell droppings. Core dumps land in the cwd a job ran from, so a crashed
+# slurm run drops a multi-hundred-MB core.<pid> straight into the repo root. The `=*`
+# catches the file an unquoted `uv add pkg>=1.2` redirect leaves behind.
+core.[0-9]*
+=*
+
 # Environment
 .env
+
+# Generated reference frames for the examples. `examples/*/data/` is not covered by the
+# `data/*` rule above, which is anchored to the repo root. The frames are trajectory data
+# (5 MB and up) and every example ships the script that rebuilds them, so only the small
+# inputs -- topologies and starting structures -- are tracked.
+examples/*/data/*.npy
+examples/*/data/*.dcd
+examples/*/data/*.trr

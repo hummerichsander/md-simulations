@@ -1,0 +1,34 @@
+# Alanine dipeptide (ACE-ALA-NME), all-atom AMBER14 with GBn2 implicit solvent, 330 K.
+#
+# This is the potential the notebook differentiates. It runs *unconstrained*
+# (`constraints: none`), unlike the repository's production configs: with the default
+# `hbonds` the twelve X-H bonds are rigid and their energy term is removed from the force
+# field, so those degrees of freedom would be missing from the potential. Free bonds need
+# the smaller timestep -- an X-H stretch has a ~11 fs period.
+#
+# The reference frames in data/ were produced by prepare_data.py from
+# configs/ala2-amber14-implicit-remd-330K-train.yaml (101 ns of T-REMD, same molecule and
+# force field, integrated with constraints) and then relaxed into this unconstrained
+# potential.
+
+engine: amber
+system: ala2
+output_subdir: ala2/AMBER14_implicit_unconstrained_330K
+
+input_pdb: pdbs/ala2.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+constraints: none
+
+num_steps: 2000000        # 1 ns at 0.5 fs
+output_freq: 2000         # a frame every 1 ps
+report_interval: 100000
+temperature: 330
+friction: 1.0
+timestep: 0.0005          # 0.5 fs: an unconstrained X-H stretch has a ~11 fs period
+integrator: langevin_middle
