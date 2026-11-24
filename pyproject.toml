@@ -229,5 +229,10 @@ exclude = [
     "src/md_simulations/prep/olives.py",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Notebooks introduce an import where the narrative first needs it, which is the point
+# of a notebook; E402 ("import not at top of cell") is noise there.
+"*.ipynb" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

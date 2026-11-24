@@ -25,7 +25,7 @@ data/
 
 Outputs are written to `<system>/<descriptor>/`, matching each config's
 `output_subdir` (e.g. `cln/AMBER14_340K/`, `ala2/AMBER14_360K/`). Each run
-directory contains `trajectory.dcd`, `energies.csv`, `forces.txt`, and
+directory contains `trajectory.dcd`, `energies.csv`, `forces.npy`, and
 `final_structure.pdb` (OpenMM engines) or GROMACS `md.*` files (native engine).
 
 ## Pointing elsewhere
