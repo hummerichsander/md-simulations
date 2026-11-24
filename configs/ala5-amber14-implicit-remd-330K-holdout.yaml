@@ -1,0 +1,53 @@
+# Poly-alanine ala5, all-atom AMBER14 + GBn2 implicit solvent, T-REMD production run "holdout", 330 K target.
+#
+# Independent holdout for the train run. Replaces the plain-MD replica set r0-r3, whose alpha_L populations were not converged
+# (Beamtime alaX, verdicts of 2026-11-06). Designed from the pilot (alaX/ala5_AMBER14_implicit_remd_330K/pilot,
+# verdicts of 2026-11-09):
+#   - t_max 600 K: even there, alpha_L is crossed only ~1-3 times per ns along a replica's own path,
+#     so a lower t_max would starve alpha_L; sampling comes from length instead.
+#   - 5 geometric rungs: the fewest for which the Gaussian energy-overlap estimate, which
+#     reproduced the pilot's measured acceptances to ~0.01, predicts >= 25 % per pair (0.33-0.35).
+#   - 101 ns: 1 ns burn-in + 100 ns = 100,000 frames at 1 ps, the size of the current training set,
+#     and >= ~50 independent alpha_L episodes reaching 330 K for the slowest residue in the pilot.
+#
+# Same potential, integrator and constraints as r0-r3 and the pilot; PPII start (pdbs/ppii/ala5.pdb, phi -75, psi 145; built with md_simulations.prep.polyalanine).
+# Other temperatures keep energies only. H-resampled by slurm/resample-h-bonds-alaX.sh (REMD_RUNS).
+engine: amber
+system: ala5
+output_subdir: alaX/ala5_AMBER14_implicit_remd_330K-holdout
+beamtime:
+  group: alaX/ala5_AMBER14_implicit_remd_330K
+  name: holdout
+
+input_pdb: pdbs/ppii/ala5.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 50500000       # 50,500,000 steps = 101 ns per replica
+output_freq: 500          # 330 K frames every 1 ps -> 101,000 frames
+report_interval: 50000    # log every 100 ps
+temperature: 330
+friction: 1.0
+timestep: 0.002
+integrator: langevin_middle
+
+replica_exchange:
+  t_max: 600
+  n_replicas: 5
+  exchange_interval: 250      # 0.5 ps
+  other_output: energies      # potential energy at every other temperature, for overlap checks / reweighting
+  other_output_freq: 500      # 1 ps
+  checkpoint_interval: 500000 # 1 ns
+  # no seed: fresh integrator and exchange streams per run
+
+slurm:
+  job_name: ala5-amber14-implicit-remd-330K-holdout
+  partition: a30
+  gres: gpu:1
+  time: 0-20:00:00
+  mem: 20G
