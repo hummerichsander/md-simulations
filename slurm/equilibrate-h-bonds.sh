@@ -123,9 +123,18 @@
 
 set -euo pipefail
 
-# Run from the directory the job was submitted from (the project root), so that relative
-# arguments mean what they did on the submit line.
-cd "${SLURM_SUBMIT_DIR:-.}"
+# Slurm already starts a job in its --chdir, or in the submit directory when none was given, so
+# there is nothing to cd to. The `cd "${SLURM_SUBMIT_DIR:-.}"` that used to be here *overrode*
+# --chdir: jobs 76206-76589 were submitted with --chdir at this checkout from a shell sitting in
+# /remote/gpu04/hummerich/projects/split-flows-public, landed there instead, sourced that
+# project's .venv and ran its non-editable md_simulations -- which has no --resume. Nothing in
+# the error said so, because that venv has a perfectly good `md-sim` of its own.
+cd "${REPO_ROOT:-$PWD}"
+if [[ ! -f ./src/md_simulations/cli.py || ! -x ./.venv/bin/python ]]; then
+    echo "error: this is not an md-simulations checkout: $PWD" >&2
+    echo "       submit with --chdir=<checkout>, or --export=ALL,REPO_ROOT=<checkout>" >&2
+    exit 2
+fi
 
 if [[ $# -lt 3 ]]; then
     echo "usage: sbatch $0 <config> <trajectory> <topology>" >&2
