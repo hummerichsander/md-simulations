@@ -14,6 +14,16 @@ overrides for this project:
   its own torch (e.g. split-flows at torch 2.9.1/cu128) takes `cgschnet` alone. Never
   put `mlcg[cu130]` back into a `cgschnet*` extra — that coupling is what forced
   split-flows into a second venv.
+- **`platform: CUDA` needs the `openmm-cuda` extra.** The plain `openmm` wheel on PyPI
+  ships only Reference/CPU/OpenCL, so `Platform.getPlatformByName("CUDA")` raises and a
+  GPU job silently has no device. `openmm-cuda` adds `openmm[cuda13]` (the separate
+  OpenMM-CUDA-13 wheel) and is deliberately *not* folded into `cu130` alone, since the
+  AMBER/AWSEM engines want the CUDA platform without any torch:
+  `uv sync --extra openmm-cuda`. Anything running MD on a GPU — every `--gres=gpu:1`
+  slurm wrapper — needs it; `cu130` includes it for the full CUDA-13 stack.
+  `[tool.uv] constraint-dependencies` holds nvrtc/nvcc below 13.2 to match the cluster
+  driver's CUDA 13.1; without that the newest toolkit emits PTX the driver cannot JIT
+  and `Context` creation dies with `CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222)`.
 - Typical third-party imports are `numpy`, `openmm`, `mdtraj`; internal ones are
   `from md_simulations.core import ...`, `from md_simulations.config import ...`:
 

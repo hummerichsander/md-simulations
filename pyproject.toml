@@ -22,6 +22,7 @@ dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "tqdm>=4.67.1",
+    "ipykernel>=7.3.0",
 ]
 
 [project.optional-dependencies]
@@ -45,13 +46,29 @@ gromacs = []
 cgschnet = [
     "mlcg; python_full_version >= '3.12'",
 ]
+# OpenMM's CUDA platform. The plain `openmm` wheel on PyPI ships only the Reference,
+# CPU and OpenCL platforms -- `Platform.getPlatformByName("CUDA")` raises there, and a
+# `platform: CUDA` config silently has no device to run on. The CUDA platform lives in
+# the separate OpenMM-CUDA-13 wheel, which `openmm[cuda13]` pins to the exact matching
+# openmm version. cuda13 (not cuda12) matches the cluster's cuda/13.0 and the `cu130`
+# torch line below; openmm only loads the CUDA build it was compiled against.
+#
+# Deliberately its own extra rather than part of `cu130`: the AMBER/AWSEM engines need
+# the CUDA platform but no torch at all, so folding it into `cu130` would drag the
+# multi-GB torch 2.11 stack into a plain MD run. On macOS the marker inside openmm's
+# own extra makes this a no-op.
+openmm-cuda = [
+    "openmm[cuda13]",
+]
 # The CUDA-13 wheel set for the cgschnet stack, matching the cluster's cuda/13.0.
 # Orthogonal to the cgschnet extras: add it when this project *is* the top-level one
 # and needs the CUDA-13 torch, and install torch with the matching backend
 # (`uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`). It needs the
 # [tool.uv] index setup below. A consumer that pins its own torch takes `cgschnet`
-# alone and keeps its CUDA line.
+# alone and keeps its CUDA line. Includes `openmm-cuda`, since a CUDA-13 host wants
+# the CUDA-13 OpenMM platform too.
 cu130 = [
+    "md-simulations[openmm-cuda]",
     "mlcg[cu130]; python_full_version >= '3.12'",
 ]
 viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
@@ -97,17 +114,24 @@ Repository = "https://github.com/hummerichsander/md-simulations"
 
 [dependency-groups]
 # Installed by default with `uv sync` / kept by `uv run` (unlike extras).
-dev = ["ruff>=0.14.10", "pytest>=7.0.0", "pytest-cov>=4.0.0"]
+dev = [
+    "ruff>=0.14.10",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "beamtime[serve]>=0.1.1",
+]
 
 [project.scripts]
 md-sim = "md_simulations.cli:main"
 md-sim-umbrella = "md_simulations.sampling.umbrella:main"
-md-sim-relax = "md_simulations.sampling.relax:main"
+md-sim-equilibrate-hbonds = "md_simulations.sampling.equilibrate_h_bonds:main"
 md-sim-resample-hbonds = "md_simulations.sampling.resample_h_bonds:main"
+md-sim-extract-frames = "md_simulations.prep.extract_frames:main"
 md-sim-cgschnet-map = "md_simulations.prep.cgschnet_map:main"
 md-sim-cgschnet-embeddings = "md_simulations.prep.cgschnet_embeddings:main"
 md-sim-cgschnet-reexport = "md_simulations.prep.cgschnet_reexport:main"
 md-sim-cgschnet-dataset = "md_simulations.prep.cgschnet_dataset:main"
+md-sim-migrate-forces = "md_simulations.prep.migrate_forces:main"
 md-sim-cgschnet-finetune = "md_simulations.prep.cgschnet_finetune:main"
 md-sim-cgschnet-priors = "md_simulations.prep.cgschnet_priors:main"
 md-sim-tica = "md_simulations.analysis.tica:main"
@@ -133,6 +157,21 @@ no-build-isolation-package = ["torch-cluster"]
 # the `install_data` command, which setuptools 80 removed -- the build fails with
 # `error: invalid command 'install_data'` unless the build env is held back.
 build-constraint-dependencies = ["setuptools<80"]
+# Hold the CUDA toolkit on the 13.1 line for the `openmm-cuda` extra. OpenMM-CUDA-13
+# pulls whatever nvidia-cuda-nvrtc/nvcc is newest (13.5.x today), but nvrtc emits PTX
+# for its own toolkit version and the driver has to JIT it. The cluster's driver
+# (590.48.01) tops out at CUDA 13.1, so 13.5 PTX dies at Context creation with
+# `CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222)` -- the CUDA platform registers fine and
+# only fails once a Simulation is actually built. 13.1.115 is verified working here
+# (13.0.88 also runs, but only with nvidia/cu13/lib on LD_LIBRARY_PATH).
+#
+# Constraints, not dependencies: they bind the transitive nvidia-* wheels only when
+# `openmm-cuda`/`cu130` actually pull them in, and are inert otherwise. Raise the
+# bound when the cluster's driver is updated -- check `nvidia-smi` "CUDA Version".
+constraint-dependencies = [
+    "nvidia-cuda-nvrtc<13.2",
+    "nvidia-cuda-nvcc<13.2",
+]
 # Needed so torch's transitive nvidia-* deps resolve across the torch/PyG indexes.
 index-strategy = "unsafe-best-match"
 
@@ -189,6 +228,11 @@ exclude = [
     # Vendored third-party script kept verbatim (see its header/citation).
     "src/md_simulations/prep/olives.py",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks introduce an import where the narrative first needs it, which is the point
+# of a notebook; E402 ("import not at top of cell") is noise there.
+"*.ipynb" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -8,9 +8,10 @@ Hamiltonian OpenMM builds has no bond term on them and so scores them not at all
 the proposal is narrow and the target flat contributes ``d / 2`` nats squared to the variance of the
 log-weights -- 8.1 nats for trp-cage's 136 bonds -- and no amount of training removes it.
 
-``sampling/relax.py`` repairs this by integrating each frame briefly in the unconstrained
-potential, and works: the per-bond width converges to the analytic one. But the distribution it is
-converging *to* is known in closed form. The bond term OpenMM deleted is separable, and the
+``sampling/equilibrate_h_bonds.py`` repairs this by integrating each frame's constrained bonds in
+the unconstrained potential at frozen heavy atoms, which samples the conditional
+``p(x_H | x_heavy)`` exactly. But the distribution that conditional is close to is known in closed
+form. The bond term OpenMM deleted is separable, and the
 residual coupling of a bond length to everything else measures 650 against the bond's own
 285000 kJ/mol/nm^2 -- 0.2% -- so
 
@@ -19,7 +20,8 @@ residual coupling of a bond length to everything else measures 650 against the b
 to that accuracy. Drawing it directly is exact by construction rather than by convergence, costs no
 dynamics at all, and moves nothing except the one coordinate that was broken: the hydrogen slides
 along its existing bond axis, so every bond angle and torsion it participates in is preserved
-exactly.
+exactly. The residual is not nothing, though -- the two widths differ by a few percent -- so an
+ensemble that is itself a reference is better equilibrated than drawn.
 
 ``r0`` and ``k`` are read off the ``HarmonicBondForce`` of the system built with
 ``constraints: none``, which is the only build that has them -- under ``hbonds`` those terms are

@@ -21,7 +21,7 @@
 # redraw is taken from the constrained twin of that same config, so nothing here assumes "the
 # hydrogens".
 #
-# No `--array`, unlike slurm/relax-unconstrained.sh: this is one numpy call over the whole
+# No `--array`, unlike slurm/equilibrate-h-bonds.sh: this is one numpy call over the whole
 # trajectory rather than 4000 integrator steps per frame, so it is seconds instead of hours and
 # needs neither sharding nor a concatenation step afterwards. The memory request covers holding the
 # trajectory twice (input and output). It is fast enough to run directly rather than queue.

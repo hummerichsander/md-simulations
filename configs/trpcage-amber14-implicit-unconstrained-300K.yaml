@@ -9,7 +9,7 @@
 # ~8 nats of log-weight spread that no training removes.
 #
 # Use this file for two things, and use the same file for both or the exercise is pointless:
-#   * `md-sim-relax`, to give the reference trajectory's X-H bonds their thermal width
+#   * `md-sim-equilibrate-hbonds`, to give the reference trajectory's X-H bonds their thermal width
 #   * the reweighting target the relaxed data is then scored against
 #
 # Not intended for production MD. The timestep below resolves the now-unconstrained X-H stretch

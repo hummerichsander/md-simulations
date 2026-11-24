@@ -57,7 +57,7 @@ def test_core_reporters_and_loop(tmp_path: Path) -> None:
     run_simulation_loop(simulation, num_steps=10, output_freq=2)
     save_final_structure(simulation, tmp_path, logging.getLogger("test"))
 
-    for name in ("trajectory.dcd", "energies.csv", "forces.txt", "final_structure.pdb"):
+    for name in ("trajectory.dcd", "energies.csv", "forces.npy", "final_structure.pdb"):
         f = tmp_path / name
         assert f.exists(), f"missing output {name}"
         assert f.stat().st_size > 0

@@ -41,6 +41,8 @@ from typing import Iterator, Literal
 import numpy as np
 import mdtraj as md
 
+from md_simulations.core.forces import FORCES_FILE, count_frames, read_forces
+
 logger = logging.getLogger("md_simulations.prep.cgschnet_dataset")
 
 ForceMap = Literal["slice_optimize", "slice_aggregate"]
@@ -77,38 +79,22 @@ def bead_indices(aa_topology: md.Topology, cg_topology: md.Topology) -> np.ndarr
 
 
 def iter_force_frames(path: Path, n_atoms: int, chunk: int) -> Iterator[np.ndarray]:
-    """Stream ``forces.txt`` in chunks of frames.
+    """Stream ``forces.npy`` in chunks of frames.
 
-    The file is whitespace text with one line per frame (341 MB for 50k frames of 284
-    atoms), so it is never loaded whole.
+    The file is memory-mapped rather than loaded, so a multi-GB run costs nothing to
+    open; each yielded block is a float64 copy of its slice.
 
     :param path: Path to the force file written by ``ForceReporter``.
     :param n_atoms: Number of all-atom sites per frame.
     :param chunk: Frames per yielded block.
-    :return: Iterator over arrays of shape (frames, n_atoms, 3) in kJ/mol/nm."""
+    :return: Iterator over arrays of shape (frames, n_atoms, 3) in kJ/mol/nm.
+    :raises ValueError: If the file does not hold *n_atoms* sites per frame."""
 
-    with path.open() as handle:
-        while True:
-            rows = [np.fromstring(line, sep=" ") for line in _take(handle, chunk)]
-            if not rows:
-                return
-            yield np.asarray(rows).reshape(len(rows), n_atoms, 3)
-
-
-def _take(handle, count: int) -> list[str]:
-    """Read up to ``count`` lines from an open handle.
-
-    :param handle: Open text handle.
-    :param count: Maximum number of lines.
-    :return: The lines read (fewer than ``count`` at end of file)."""
-
-    out = []
-    for line in handle:
-        out.append(line)
-        if len(out) == count:
-            break
-
-    return out
+    forces = read_forces(path)
+    if forces.shape[1:] != (n_atoms, 3):
+        raise ValueError(f"{path} holds {forces.shape[1:]} per frame, expected ({n_atoms}, 3)")
+    for start in range(0, len(forces), chunk):
+        yield np.asarray(forces[start : start + chunk], dtype=np.float64)
 
 
 def frame_selection(
@@ -123,7 +109,7 @@ def frame_selection(
     Selection is resolved up front and applied by masking inside each already-paired
     block — never by striding the readers. ``mdtraj.iterload(chunk=c, stride=s)`` yields
     blocks of ``c`` frames spanning ``c * s`` *file* frames, so striding the trajectory
-    reader while taking every ``s``-th line of ``forces.txt`` silently misaligns
+    reader while taking every ``s``-th frame of ``forces.npy`` silently misaligns
     coordinates and forces by a factor of ``s``.
 
     ``--start`` is an equilibration correction and is legitimate. Selecting frames by
@@ -141,9 +127,7 @@ def frame_selection(
 
     if frame_indices is not None:
         if stride != 1 or start != 0 or stop is not None:
-            raise ValueError(
-                "--frame-indices cannot be combined with --stride/--start/--stop."
-            )
+            raise ValueError("--frame-indices cannot be combined with --stride/--start/--stop.")
         selection = np.asarray(np.load(frame_indices)).ravel()
         if not np.issubdtype(selection.dtype, np.integer):
             raise ValueError(f"{frame_indices} must hold integers, got {selection.dtype}.")
@@ -165,16 +149,6 @@ def frame_selection(
     if len(selection) == 0:
         raise ValueError("The frame selection is empty; nothing to project.")
     return selection.astype(np.int64)
-
-
-def count_lines(path: Path) -> int:
-    """Count lines in a text file without holding it in memory.
-
-    :param path: Path to the file.
-    :return: The number of lines."""
-
-    with path.open("rb") as handle:
-        return sum(chunk.count(b"\n") for chunk in iter(lambda: handle.read(1 << 20), b""))
 
 
 def cg_trajectory(cg_coords_angstrom: np.ndarray, bead_pdb: Path) -> md.Trajectory:
@@ -277,7 +251,7 @@ def iter_paired_blocks(
     :return: Iterator of ``(positions, forces)`` float64 blocks."""
 
     dcd = run_dir / "trajectory.dcd"
-    force_blocks = iter_force_frames(run_dir / "forces.txt", n_atoms, chunk)
+    force_blocks = iter_force_frames(run_dir / FORCES_FILE, n_atoms, chunk)
     offset = 0
     for block in md.iterload(str(dcd), top=str(aa_pdb), chunk=chunk):
         try:
@@ -378,7 +352,7 @@ def build_dataset(
     temperatures averages two different targets at the same configuration.
 
     :param run_dirs: One or more simulation output directories
-        (``trajectory.dcd``, ``forces.txt``).
+        (``trajectory.dcd``, ``forces.npy``).
     :param bead_pdb: CG topology fixing the bead set and order.
     :param out_dir: Directory the ``.npy`` arrays and metadata are written to.
     :param force_map: Which aggforce map to fit.
@@ -412,16 +386,16 @@ def build_dataset(
     cg_matrix = np.zeros((len(indices), aa_topology.n_atoms))
     cg_matrix[np.arange(len(indices)), indices] = 1.0
 
-    # Pairing is positional: line i of forces.txt is frame i of the DCD. Check it rather
+    # Pairing is positional: frame i of forces.npy is frame i of the DCD. Check it rather
     # than discovering a truncated force file as a quietly shorter dataset.
     selections, source_frames = [], []
     for run in runs:
         with md.open(str(run / "trajectory.dcd")) as handle:
             n_dcd = len(handle)
-        n_force = count_lines(run / "forces.txt")
+        n_force = count_frames(run / FORCES_FILE)
         if n_force != n_dcd:
             raise ValueError(
-                f"{run}: forces.txt has {n_force} lines but the DCD has {n_dcd} frames. "
+                f"{run}: forces.npy has {n_force} frames but the DCD has {n_dcd}. "
                 "Frame pairing is positional, so a mismatch means the run is incomplete."
             )
         source_frames.append(n_dcd)
@@ -431,9 +405,7 @@ def build_dataset(
     # once on the first run's selected prefix and reused everywhere. Reusing it is also
     # required: a per-run map would make the pooled forces inconsistent.
     first = selections[0][:fit_frames]
-    fit_coords, fit_forces = read_all_atom(
-        runs[0], aa_pdb, aa_topology.n_atoms, chunk, first
-    )
+    fit_coords, fit_forces = read_all_atom(runs[0], aa_pdb, aa_topology.n_atoms, chunk, first)
     projection, n_constraints = build_force_map(
         fit_coords,
         fit_forces,
@@ -449,8 +421,9 @@ def build_dataset(
         )
         coords_blocks.append(c)
         forces_blocks.append(f)
-        per_run.append({"run_dir": str(run), "n_frames": int(len(c)),
-                        "temperature": _summary_temperature(run)})
+        per_run.append(
+            {"run_dir": str(run), "n_frames": int(len(c)), "temperature": _summary_temperature(run)}
+        )
         logger.info(f"{run.name}: projected {len(c)} frames")
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -465,8 +438,9 @@ def build_dataset(
     np.save(out_dir / "cg_forces.npy", forces_out)
     np.save(out_dir / "force_map.npy", projection)
     np.save(out_dir / "bead_indices.npy", indices)
-    np.save(out_dir / "segment_lengths.npy",
-            np.array([r["n_frames"] for r in per_run], dtype=np.int64))
+    np.save(
+        out_dir / "segment_lengths.npy", np.array([r["n_frames"] for r in per_run], dtype=np.int64)
+    )
 
     temperatures = {r["temperature"] for r in per_run if r["temperature"] is not None}
     if len(temperatures) > 1:
@@ -479,7 +453,10 @@ def build_dataset(
     embeds = None
     if cgschnet_config is not None:
         priors = prior_forces(
-            coords_out, cgschnet_config, data_root or Path("data"), bead_pdb,
+            coords_out,
+            cgschnet_config,
+            data_root or Path("data"),
+            bead_pdb,
             device=prior_device,
         )
         delta = forces_out - priors
@@ -488,9 +465,9 @@ def build_dataset(
         write_h5(out_dir / f"{name}.h5", name, coords_out, delta, embeds)
         delta_written = True
         logger.info(
-            f"delta forces: RMS {np.sqrt((delta ** 2).mean()):.2f} vs total "
-            f"{np.sqrt((forces_out ** 2).mean()):.2f} kcal/mol/A "
-            f"(prior explains {100 * (1 - (delta ** 2).mean() / (forces_out ** 2).mean()):.1f}%)"
+            f"delta forces: RMS {np.sqrt((delta**2).mean()):.2f} vs total "
+            f"{np.sqrt((forces_out**2).mean()):.2f} kcal/mol/A "
+            f"(prior explains {100 * (1 - (delta**2).mean() / (forces_out**2).mean()):.1f}%)"
         )
 
     coverage = None
@@ -705,9 +682,7 @@ def write_h5(
         group.attrs["N_frames"] = int(cg_coords.shape[0])
 
 
-def cg_embeddings(
-    cgschnet_config: Path, data_root: Path, bead_pdb: Path
-) -> np.ndarray:
+def cg_embeddings(cgschnet_config: Path, data_root: Path, bead_pdb: Path) -> np.ndarray:
     """Per-bead embedding types for a CG topology, taken from the model's configurations.
 
     The types live in ``configurations_file`` in the *model's* bead order, while the
@@ -773,7 +748,9 @@ def _summary_constraints(run_dir: Path) -> int | None:
 def main() -> None:
     """CLI entry point."""
 
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--run",
         required=True,
@@ -782,7 +759,9 @@ def main() -> None:
         help="One or more simulation output directories, pooled into one dataset. "
         "They must share a temperature.",
     )
-    parser.add_argument("--bead-pdb", required=True, type=Path, help="CG topology (bead set and order).")
+    parser.add_argument(
+        "--bead-pdb", required=True, type=Path, help="CG topology (bead set and order)."
+    )
     parser.add_argument("--out", required=True, type=Path, help="Output directory.")
     parser.add_argument("--topology", type=Path, default=None, help="All-atom topology PDB.")
     parser.add_argument(

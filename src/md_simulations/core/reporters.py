@@ -2,17 +2,20 @@ import sys
 import logging
 from pathlib import Path
 
+import numpy as np
 import openmm
 import openmm.app as app
 import openmm.unit as unit
 
+from md_simulations.core.forces import FORCES_FILE, ForceWriter
+
 
 class ForceReporter:
-    """Write per-atom (or per-bead) forces to a whitespace-delimited text file.
+    """Write per-atom (or per-bead) forces to a float32 ``.npy`` file.
 
-    Each line in the output file corresponds to one report interval and
-    contains the x, y, z force components (kJ mol⁻¹ nm⁻¹) for every atom
-    in *atomSubset* (or all atoms when *atomSubset* is ``None``).
+    The array has shape (frames, atoms, 3): one frame per report interval, holding
+    the x, y, z force components (kJ mol⁻¹ nm⁻¹) of every atom in *atomSubset*
+    (or of all atoms when *atomSubset* is ``None``).
 
     Compatible with both all-atom OpenMM topologies and the 3-bead CG
     topologies produced by OpenAWSEM.
@@ -29,13 +32,16 @@ class ForceReporter:
         reportInterval: int,
         atomSubset: list[int] | None = None,
     ) -> None:
-        self._out = open(file, "w")
+        self._file = Path(file)
         self._reportInterval = reportInterval
         self._atomSubset = atomSubset
+        # The site count is only known once a frame arrives, since atomSubset may be None.
+        self._writer: ForceWriter | None = None
 
     def __del__(self) -> None:
         try:
-            self._out.close()
+            if self._writer is not None:
+                self._writer.close()
         except Exception:
             pass
 
@@ -44,13 +50,14 @@ class ForceReporter:
         return {"steps": steps, "periodic": None, "include": ["forces"]}
 
     def report(self, simulation: app.Simulation, state: openmm.State) -> None:
-        forces = state.getForces().value_in_unit(unit.kilojoules / unit.mole / unit.nanometer)
-        subset = self._atomSubset if self._atomSubset is not None else range(len(forces))
-        line = (
-            " ".join(f"{forces[i][0]:g} {forces[i][1]:g} {forces[i][2]:g}" for i in subset) + "\n"
+        forces = np.asarray(
+            state.getForces().value_in_unit(unit.kilojoules / unit.mole / unit.nanometer)
         )
-        self._out.write(line)
-        self._out.flush()
+        if self._atomSubset is not None:
+            forces = forces[self._atomSubset]
+        if self._writer is None:
+            self._writer = ForceWriter(self._file, len(forces))
+        self._writer.write(forces)
 
 
 def add_standard_reporters(
@@ -60,6 +67,7 @@ def add_standard_reporters(
     output_freq: int,
     num_steps: int,
     logger: logging.Logger | None = None,
+    write_forces: bool = True,
 ) -> None:
     """Attach the standard set of reporters to *simulation* in-place.
 
@@ -69,7 +77,7 @@ def add_standard_reporters(
     - :class:`openmm.app.DCDReporter` → ``<output_dir>/trajectory.dcd``.
     - :class:`openmm.app.StateDataReporter` → ``<output_dir>/energies.csv``
       (step + configurational potential energy, one row per trajectory frame).
-    - :class:`ForceReporter` → ``<output_dir>/forces.txt``.
+    - :class:`ForceReporter` → ``<output_dir>/forces.npy``, unless *write_forces* is false.
 
     :param simulation: The simulation object to attach reporters to.
     :param output_dir: Directory where trajectory and force files are written.
@@ -77,12 +85,13 @@ def add_standard_reporters(
     :param output_freq: Steps between DCD frame and force writes.
     :param num_steps: Total number of steps (used by the progress reporter).
     :param logger: Optional logger for path-confirmation messages.
+    :param write_forces: Whether to write ``forces.npy``.
     :return: None."""
     _log = logger or logging.getLogger(__name__)
 
     trajectory_dcd = output_dir / "trajectory.dcd"
     energies_csv = output_dir / "energies.csv"
-    forces_txt = output_dir / "forces.txt"
+    forces_npy = output_dir / FORCES_FILE
 
     simulation.reporters.append(
         app.StateDataReporter(
@@ -109,8 +118,11 @@ def add_standard_reporters(
             separator=",",
         )
     )
-    simulation.reporters.append(ForceReporter(str(forces_txt), output_freq))
+    if write_forces:
+        simulation.reporters.append(ForceReporter(str(forces_npy), output_freq))
 
     _log.info(f"DCD trajectory → {trajectory_dcd}")
     _log.info(f"Energies       → {energies_csv}")
-    _log.info(f"Forces         → {forces_txt}")
+    _log.info(
+        f"Forces         → {forces_npy}" if write_forces else "Forces         → (not written)"
+    )

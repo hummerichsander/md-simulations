@@ -3,6 +3,7 @@ import pytest
 
 mdtraj = pytest.importorskip("mdtraj")
 
+from md_simulations.core.forces import FORCES_FILE, ForceWriter, count_frames
 from md_simulations.prep.cgschnet_dataset import (
     NM_TO_ANGSTROM,
     KJNM_TO_KCALA,
@@ -11,7 +12,6 @@ from md_simulations.prep.cgschnet_dataset import (
     bead_indices,
     cg_native,
     cg_trajectory,
-    count_lines,
     frame_selection,
     project_run,
     read_all_atom,
@@ -59,9 +59,10 @@ def _fake_run(tmp_path, n_frames: int = 40, n_res: int = 3):
     traj.save_dcd(str(run / "trajectory.dcd"))
     traj[0].save_pdb(str(run / "initial_structure.pdb"))
 
-    with (run / "forces.txt").open("w") as handle:
-        for k in range(n_frames):
-            handle.write(" ".join([f"{-float(k):g}"] * (n_atoms * 3)) + "\n")
+    writer = ForceWriter(run / FORCES_FILE, n_atoms)
+    for k in range(n_frames):
+        writer.write(np.full((n_atoms, 3), -float(k), dtype=np.float32))
+    writer.close()
 
     (run / "simulation_summary.txt").write_text(
         "Particles:        15\nConstraints:      1,234\nTemperature: 330.0 K\n"
@@ -130,10 +131,13 @@ def test_frame_selection_rejects_empty_and_invalid():
         frame_selection(10, start=-1)
 
 
-def test_count_lines(tmp_path):
-    path = tmp_path / "f.txt"
-    path.write_text("a\nb\nc\n")
-    assert count_lines(path) == 3
+def test_count_frames(tmp_path):
+    """The frame count comes from the header, without reading the data."""
+    path = tmp_path / "f.npy"
+    writer = ForceWriter(path, 4)
+    writer.write(np.zeros((3, 4, 3), dtype=np.float32))
+    writer.close()
+    assert count_frames(path) == 3
 
 
 @pytest.mark.parametrize("chunk", [3, 7, 100])

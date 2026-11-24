@@ -1,0 +1,64 @@
+# Poly-alanine ala2, all-atom AMBER14 + GBn2 implicit solvent, T-REMD production run "train", 330 K target.
+#
+# Boltzmann-generator training set. Replaces the plain-MD replica set r0-r3, whose alpha_L populations were not converged
+# (Beamtime alaX, verdicts of 2026-11-06). Designed from the pilot (alaX/ala2_AMBER14_implicit_remd_330K/pilot,
+# verdicts of 2026-11-09):
+#   - t_max 600 K: even there, alpha_L is crossed only ~1-3 times per ns along a replica's own path,
+#     so a lower t_max would starve alpha_L; sampling comes from length instead.
+#   - 3 geometric rungs: the fewest for which the Gaussian energy-overlap estimate, which
+#     reproduced the pilot's measured acceptances to ~0.01, predicts >= 25 % per pair (0.29, 0.32).
+#   - 101 ns originally: 1 ns burn-in + 100 ns = 100,000 frames at 1 ps, the size of the current
+#     training set, and >= ~50 independent alpha_L episodes reaching 330 K for the slowest residue
+#     in the pilot.
+#
+# Extended to 404 ns (2026-11-24) for the multiscale_ala2 example, which needs more alpha_L than the
+# first 101 ns holds. Measured there: alpha_L is 1.74 % of frames but its mean dwell is only 2.6 ps,
+# so 101 ns contains just 682 statistically independent alpha_L visits -- more frames per ns buy
+# almost nothing, only more nanoseconds do. 404 ns gives ~2,700. Run as three resumes from
+# checkpoint/ (`RESUME=1`), since 303 ns at the measured 13.9 ns/h exceeds the 12 h slurm limit.
+#
+# NOTE: the checkpoint was written on the **OpenCL** platform and OpenMM checkpoints do not cross
+# platforms. Do not install the `openmm-cuda` extra into .venv until this run has finished, or the
+# resume fails in _restore().
+#
+# Same potential, integrator and constraints as r0-r3 and the pilot; ideal alpha-helix start (pdbs/ala2.pdb, phi -57.8, psi -47).
+# Other temperatures keep energies only. H-resampled by slurm/resample-h-bonds-alaX.sh (REMD_RUNS).
+engine: amber
+system: ala2
+output_subdir: alaX/ala2_AMBER14_implicit_remd_330K-train
+beamtime:
+  group: alaX/ala2_AMBER14_implicit_remd_330K
+  name: train
+
+input_pdb: pdbs/ala2.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+
+num_steps: 202000000      # 202,000,000 steps = 404 ns per replica (was 50,500,000 = 101 ns)
+output_freq: 500          # 330 K frames every 1 ps -> 404,000 frames
+report_interval: 50000    # log every 100 ps
+temperature: 330
+friction: 1.0
+timestep: 0.002
+integrator: langevin_middle
+
+replica_exchange:
+  t_max: 600
+  n_replicas: 3
+  exchange_interval: 250      # 0.5 ps
+  other_output: energies      # potential energy at every other temperature, for overlap checks / reweighting
+  other_output_freq: 500      # 1 ps
+  checkpoint_interval: 500000 # 1 ns
+  # no seed: fresh integrator and exchange streams per run
+
+slurm:
+  job_name: ala2-amber14-implicit-remd-330K-train
+  partition: a30
+  gres: gpu:1
+  time: 0-12:00:00
+  mem: 20G

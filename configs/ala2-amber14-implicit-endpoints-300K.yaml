@@ -1,0 +1,54 @@
+# Poly-alanine ala2, all-atom AMBER14 + GBn2 implicit solvent, plain MD at 300 K.
+#
+# The cold endpoint of the pair {300 K, 600 K}: the two temperatures a T-REMD ladder for this
+# system would span, but sampled by *classical, non-exchanging* MD -- one independent Langevin
+# trajectory per temperature, no swaps, so each is an ordinary canonical ensemble produced by
+# unbiased dynamics. 300 K is the standard reference temperature for protein MD (the alaX runs'
+# 330 K is deliberately heated to speed up sampling, not a physiological choice); 600 K matches
+# the top rung of ala2-amber14-implicit-remd-330K-{pilot,train}.
+#
+# Intended as temperature-conditioned Boltzmann-generator training data, hence 1 ps frames over a
+# long trajectory rather than the 2 fs frames of ala2-amber14-implicit-330K.yaml.
+#
+# CAVEAT -- alpha_L is not converged here, and cannot be. Plain MD at 330 K spends 0.0004 % of its
+# frames in alpha_L (10 ns, replica set r0-r3; Beamtime alaX, verdicts of 2026-11-06); that is the
+# finding that replaced r0-r3 with T-REMD in the first place, and at 300 K the basin is rarer
+# still. 350 ns buys more crossings than 10 ns did but nothing like the ~2,700 independent
+# alpha_L visits of the 404 ns REMD train run. Use this run for the low-temperature *dynamics*
+# and for the beta / alpha_R populations; do not expect a converged alpha_L weight from it.
+#
+# Same potential, integrator, constraints and start as the REMD runs: ideal alpha-helix start
+# (pdbs/ala2.pdb, phi -57.8, psi -47), LangevinMiddle, 2 fs, hbonds, friction 1/ps.
+# H-resample with slurm/resample-h-bonds-alaX.sh before scoring frames in the unconstrained
+# potential (constraints: hbonds removes the X-H bond energy term).
+engine: amber
+system: ala2
+output_subdir: alaX/ala2_AMBER14_implicit_300K
+beamtime:
+  group: alaX/ala2_AMBER14_implicit_endpoints
+  name: 300K
+
+input_pdb: pdbs/ala2.pdb
+forcefield:
+  - amber14-all.xml
+  - implicit/gbn2.xml
+ph: 7.0
+implicit_solvent: true
+salt_conc: 0.0
+nonbonded_cutoff: 2.0
+constraints: hbonds
+
+num_steps: 175000000      # 175,000,000 steps = 350 ns
+output_freq: 500          # a frame every 1 ps -> 350,000 frames
+report_interval: 50000    # stdout log every 100 ps
+temperature: 300
+friction: 1.0
+timestep: 0.002
+integrator: langevin_middle
+
+slurm:
+  job_name: ala2-amber14-implicit-300K
+  partition: a30
+  gres: gpu:1
+  time: 0-12:00:00
+  mem: 20G

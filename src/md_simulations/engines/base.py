@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,21 +11,32 @@ from beamtime.sdk.run import Run
 
 from md_simulations.core import (
     BeamtimeReporter,
+    ReplicaExchange,
     add_standard_reporters,
     create_integrator,
+    freeze_atoms,
     record_outputs,
+    read_checkpoint,
+    resume_replica_runs,
     run_simulation_loop,
     save_final_structure,
     save_initial_structure,
+    start_replica_runs,
     start_run,
     write_simulation_summary,
+)
+from md_simulations.core.remd import (
+    CHECKPOINT_DIR,
+    EXCHANGES_FILE,
+    resolve_ladder,
+    temperature_names,
 )
 
 # The files every OpenMM engine writes, referenced from its Beamtime run.
 OUTPUT_FILES = (
     "trajectory.dcd",
     "energies.csv",
-    "forces.txt",
+    "forces.npy",
     "initial_structure.pdb",
     "final_structure.pdb",
     "simulation_summary.txt",
@@ -52,12 +64,16 @@ class Engine(ABC):
 
     :param config: The engine-specific configuration model.
     :param data_root: Root directory for resolving input/output paths.
-    :param logger: Logger for progress messages."""
+    :param logger: Logger for progress messages.
+    :param resume: Continue from the checkpoint of an earlier run (replica exchange only)."""
 
-    def __init__(self, config, data_root: Path, logger: logging.Logger) -> None:
+    def __init__(
+        self, config, data_root: Path, logger: logging.Logger, resume: bool = False
+    ) -> None:
         self.config = config
         self.data_root = data_root
         self.logger = logger
+        self.resume = resume
 
     @abstractmethod
     def run(self) -> Path:
@@ -83,11 +99,16 @@ class OpenMMEngine(Engine):
         raise NotImplementedError
 
     def run(self) -> Path:
-        """Run the simulation as one Beamtime run.
+        """Run the simulation as one Beamtime run, or as a group of runs for replica exchange.
 
         :return: The output directory containing the results."""
         output_dir = self.config.output_dir(self.data_root)
         output_dir.mkdir(parents=True, exist_ok=True)
+        if self.config.replica_exchange is not None:
+            self.run_replica_exchange(output_dir)
+            return output_dir
+        if self.resume:
+            raise ValueError("resume is only supported for replica-exchange runs")
         with start_run(self.config, output_dir) as run:
             self.simulate(output_dir, run)
             record_outputs(run, [output_dir / name for name in OUTPUT_FILES])
@@ -100,6 +121,8 @@ class OpenMMEngine(Engine):
         :param run: The Beamtime run."""
         cfg = self.config
         built = self.build_system()
+        if cfg.frozen_atoms is not None:
+            freeze_atoms(built.system, built.topology, cfg.frozen_atoms, self.logger)
 
         integrator = create_integrator(
             cfg.temperature, cfg.friction, cfg.timestep, kind=cfg.integrator
@@ -132,6 +155,7 @@ class OpenMMEngine(Engine):
             output_freq=cfg.output_freq,
             num_steps=cfg.num_steps,
             logger=self.logger,
+            write_forces=cfg.write_forces,
         )
         simulation.reporters.append(BeamtimeReporter(run=run, report_interval=cfg.report_interval))
 
@@ -145,3 +169,55 @@ class OpenMMEngine(Engine):
 
         self.logger.info("Simulation completed successfully!")
         self.logger.info(f"Output files: {output_dir}")
+
+    def run_replica_exchange(self, output_dir: Path) -> None:
+        """Run T-REMD with one Beamtime run per temperature, resuming from a checkpoint if asked.
+
+        On resume the runs of the checkpointed attempt are continued as new attempts, so the logs
+        of one simulation stay in one run per temperature; see
+        :func:`md_simulations.core.resume_replica_runs`.
+
+        :param output_dir: The directory to write into."""
+        cfg = self.config
+        state = read_checkpoint(output_dir)
+        if state is not None and not self.resume:
+            raise FileExistsError(
+                f"{output_dir / CHECKPOINT_DIR} holds a checkpoint: pass --resume to continue "
+                "it, or remove it to start over."
+            )
+        if state is None and self.resume:
+            raise FileNotFoundError(
+                f"no checkpoint to resume from in {output_dir / CHECKPOINT_DIR}"
+            )
+
+        temperatures = resolve_ladder(cfg)
+        names = temperature_names(temperatures)
+        with ExitStack() as stack:
+            if state is None:
+                runs = start_replica_runs(cfg, output_dir, names)
+            else:
+                runs = resume_replica_runs(cfg, output_dir, names, state["run_ids"], state["step"])
+            runs = [stack.enter_context(run) for run in runs]
+
+            built = self.build_system()
+            if cfg.frozen_atoms is not None:
+                freeze_atoms(built.system, built.topology, cfg.frozen_atoms, self.logger)
+            ReplicaExchange(
+                topology=built.topology,
+                system=built.system,
+                positions=built.positions,
+                box_vectors=built.box_vectors,
+                config=cfg,
+                output_dir=output_dir,
+                runs=runs,
+                logger=self.logger,
+                initialize_velocities=self.initialize_velocities,
+            ).run(state)
+
+            shared = [EXCHANGES_FILE, "simulation_summary.txt"]
+            for k, run in enumerate(runs):
+                folder = output_dir if k == 0 else output_dir / names[k]
+                files = [folder / name for name in ("energies.csv", "trajectory.dcd", "forces.npy")]
+                if k == 0:
+                    files += [output_dir / name for name in OUTPUT_FILES]
+                record_outputs(run, files + [output_dir / name for name in shared])

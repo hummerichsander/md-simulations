@@ -33,7 +33,34 @@ friction: 1.0                          # Langevin friction coefficient (ps^-1)
 timestep: 0.002                        # integration timestep (ps)
 integrator: langevin                   # langevin | langevin_middle
 minimize_energy: true                  # energy-minimise before production
+write_forces: true                     # false skips forces.npy (only force-matching data needs it)
 log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+# Hold a subset of atoms immobile (mass 0), so the run samples the Boltzmann distribution of the
+# others *conditioned* on the frozen coordinates -- e.g. sidechains conditioned on a fixed
+# backbone. Give exactly one of `names` or `indices`. Requires `constraints: none` whenever a
+# constraint would touch a frozen atom (any frozen heavy atom bearing a hydrogen): OpenMM cannot
+# constrain a massless particle, so X-H bonds stay explicit and the timestep must drop to ~0.0005.
+# frozen_atoms:
+#   names: [N, CA, CB, C, O]           # atom names, matched against the *built* topology
+#   # indices: [0, 1, 2]               # or zero-based indices into the built topology
+#   expect_count: 47                   # optional guard: fail if the selection is a different size
+
+# Temperature replica exchange (T-REMD): one replica per temperature, `temperature` above is the
+# target (lowest) one and its files go to the output directory as in a plain run. OpenMM engines
+# only, NVT only. Resume a killed job with `md-sim run <config> --resume`, on the same platform.
+# replica_exchange:
+#   t_max: 500                         # geometric ladder from `temperature` to t_max ...
+#   n_replicas: 8                      #   ... with this many temperatures
+#   # temperatures: [330, 360, 400]    # or an explicit ascending ladder starting at `temperature`
+#   exchange_interval: 500             # steps between exchange attempts (500 = 1 ps at 2 fs)
+#   other_output: energies             # none | energies | full: what the other temperatures
+#                                      #   write to T{k}_{T}K/ (full = energies, DCD and forces)
+#   # other_output_freq: 1000          # their output interval; default: output_freq
+#   # seed: 1                          # exchange RNG seed; integrators get seed + 1 + replica
+#   # checkpoint_interval: 50000       # steps between checkpoints (multiple of exchange_interval)
+# # num_steps must be a multiple of exchange_interval; output_freq, exchange_interval and
+# # other_output_freq must divide one another.
 
 slurm:                                 # resources for `md-sim gen-slurm`
   job_name: md-my-system               # SBATCH --job-name

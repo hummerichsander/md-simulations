@@ -56,9 +56,7 @@ def pretrained_schnet(model_file: str, device: str = "cpu") -> torch.nn.Module:
 
     model = load_model(model_file, device)
     if SCHNET_KEY not in model.models:
-        raise KeyError(
-            f"{model_file} has no '{SCHNET_KEY}' term; available: {list(model.models)}."
-        )
+        raise KeyError(f"{model_file} has no '{SCHNET_KEY}' term; available: {list(model.models)}.")
     schnet = model.models[SCHNET_KEY]
     n_params = sum(p.numel() for p in schnet.parameters())
     logger.info(f"fine-tuning from pretrained {SCHNET_KEY} ({n_params:,} parameters)")
@@ -144,9 +142,7 @@ def write_multi_h5(
         for name, a, b in zip(names, bounds[:-1], bounds[1:]):
             group = parent.create_group(name)
             group.create_dataset("cg_coords", data=cg_coords[a:b].astype(np.float32))
-            group.create_dataset(
-                "cg_delta_forces", data=cg_delta_forces[a:b].astype(np.float32)
-            )
+            group.create_dataset("cg_delta_forces", data=cg_delta_forces[a:b].astype(np.float32))
             group.attrs["cg_embeds"] = np.asarray(cg_embeds, dtype=np.int64)
             group.attrs["N_frames"] = int(b - a)
             logger.info(f"{metaset}/{name}: {b - a} frames")

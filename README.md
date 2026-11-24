@@ -16,7 +16,7 @@ Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of
 | file | what it is |
 | --- | --- |
 | `trajectory.dcd` | the production trajectory |
-| `energies.csv`, `forces.txt` | per-frame potential energy and forces |
+| `energies.csv`, `forces.npy` | per-frame potential energy and forces |
 | `initial_structure.pdb` | first frame, written up front — use it as the topology for viewing the DCD |
 | `final_structure.pdb` | last frame, and the restart point for a follow-up run |
 | `simulation_summary.txt` | force field, ensemble, thermostat, timestep, simulated time |
@@ -56,6 +56,107 @@ A `cgschnet` config with `n_replicas > 1` makes this group by itself:
 `<group>/<name>/r00, r01, ...`, one run per batched replica. Those runs do not capture the
 console output, and a job killed by slurm leaves them `lost` rather than `killed`.
 `beamtime serve --open` shows the log in the browser.
+
+## Replica exchange
+
+Any OpenMM engine (`amber`, `pure_liquid`, `martini`, `gromacs_input`, `awsem`) can run
+temperature replica exchange by adding a `replica_exchange:` block — see the commented one in
+`configs/templates/amber.yaml`. One replica runs per temperature of a ladder (explicit, or
+geometric from `temperature` to `t_max`), and every `exchange_interval` steps neighbouring
+temperatures attempt to swap. Swaps move the temperature, not the coordinates: the replicas'
+velocities are rescaled by `sqrt(T_new / T_old)`. The system must be NVT.
+
+`temperature` is the target (lowest) rung. Its files are written into the output directory exactly
+as for a plain run (`trajectory.dcd`, `energies.csv`, `forces.npy`, the two PDBs and
+`simulation_summary.txt`, which gains a replica-exchange section), so downstream code does not
+change. The other temperatures write into `T01_360K/`, ... as `other_output` says, and
+`exchanges.csv` has one row per attempt: who sits at each temperature and which pairs swapped.
+Beamtime gets one run per temperature below `<group>/<name>`, each logging its swap acceptance
+with the next temperature up, and the global round-trip count.
+
+`checkpoint_interval` writes `checkpoint/`. A rerun that finds one stops rather than overwrite it;
+continue with `md-sim run configs/x.yaml --resume`. OpenMM checkpoints belong to the platform and
+OpenMM version that wrote them, so resume on the same kind of GPU node. The Beamtime runs are
+continued as a new attempt, not duplicated. Replicas currently run one after another in one
+process, so a job costs about `n_replicas` plain runs of GPU time.
+
+## Conditional sampling (frozen atoms)
+
+`frozen_atoms:` holds a subset of the atoms immobile, so the run samples the Boltzmann
+distribution of the others *conditioned* on the frozen coordinates — sidechains at a fixed
+backbone, say. Select by atom name (matched against the built topology, so hydrogens added at
+build time are covered) or by index, and set `expect_count` to fail fast when the selection
+resolves against a topology it was not written for:
+
+```yaml
+constraints: none
+timestep: 0.0005
+frozen_atoms:
+  names: [N, CA, CB, C, O]
+  expect_count: 47
+```
+
+Freezing is by zero mass, which drops those atoms from the equations of motion exactly; a stiff
+positional restraint would instead leave a thermal smear of width `sqrt(kT/k)` on the very
+coordinates the conditional is defined by, and would add its energy to `forces.npy`.
+
+The catch is constraints: OpenMM refuses, at context creation, any constraint involving a massless
+particle, because SHAKE/CCMA split the correction between two mobile partners in proportion to
+inverse mass and a frozen partner can absorb none of it. Any frozen heavy atom bearing a hydrogen
+therefore forces `constraints: none`, hence explicit X–H stretches (~11 fs period) and a ~0.5 fs
+timestep. The build-time check names the offending bond rather than letting the job fail on the
+GPU. The dof count, the reported temperature and `simulation_summary.txt` all account for the
+frozen atoms, and the centre-of-mass motion remover is dropped along with them.
+
+Comparing such a run against an ensemble produced with `constraints: hbonds` means crossing a
+convention: flexible dynamics and the resampler's independent-harmonic draw are *not* the same
+density (the chignolin fiber pilot measured a 3 % narrower X–H width under flexible dynamics).
+Put the reference in the unconstrained convention first — see the next section.
+
+`configs/cln-fiber-amber14-implicit-330K-rep*.yaml` + `slurm/cln-fiber-amber14-implicit-330K.sh`
+are a worked example: six chignolin runs, each freezing the 47-bead slow subspace of one
+conformational mode.
+
+## Repairing constrained bonds
+
+A trajectory run with `constraints: hbonds` has every X–H bond pinned at exactly its equilibrium
+length, so those coordinates carry no thermal variance — measured std 0.40 pm, against an XTC
+quantization floor of 0.41. Anything that reweights a generative model against the all-atom
+potential then pays `d / 2` nats² of log-weight variance (8.1 nats for trp-cage's 136 bonds) for
+coordinates the model generates and the constrained Hamiltonian does not score at all. Two tools
+repair that, both taking the bond set from the *constrained twin* of the config they are given —
+so neither assumes "the hydrogens", and `--constrained-as allbonds` works the same way.
+
+| | `md-sim-resample-hbonds` | `md-sim-equilibrate-hbonds` |
+| --- | --- | --- |
+| what it does | draws each length from `N(r0, sqrt(kT/k))` and slides the H along its own bond axis | integrates the free ends in the unconstrained potential, every other atom frozen at zero mass |
+| distribution | the bond treated as an isolated harmonic oscillator | the true conditional `p(x_H \| x_heavy)`, angles and nonbonded terms included |
+| cost | seconds for a whole trajectory, one numpy call | hours; a sharded array job |
+| leaves alone | every other coordinate, exactly | every other coordinate, exactly (zero mass, so bit-identical) |
+
+The draw is exact to the extent that the length decouples from everything else, which it nearly
+does — the residual coupling measures 650 against the bond's own 285000 kJ/mol/nm² — but not
+quite: the two differ by a few percent in width, and only the second is what the potential
+actually scores. Use the resampler when speed matters or the ensemble is being put into a
+reference's convention; use the equilibration when the output is itself the reference.
+
+```bash
+sbatch slurm/equilibrate-h-bonds.sh configs/x-unconstrained.yaml traj.trr top.pdb
+EQUIL_TIME=5.0 FRICTION=20.0 sbatch slurm/equilibrate-h-bonds.sh ...   # knobs; see the header
+```
+
+The config must set `constraints: none` — it is both the only build carrying the bond terms and
+the only one OpenMM will freeze atoms in. Two numbers have to be measured rather than assumed, and
+they trade off: convergence is a **plateau in `EQUIL_TIME`**, not agreement with `sqrt(kT/k)`
+(that analytic width is the thing being corrected), and raising `FRICTION` reaches the plateau in
+fewer steps while biasing nothing, since the stationary distribution of Langevin dynamics does not
+depend on the friction.
+
+The array shards by **contiguous block**, not by stride, because the shards are concatenated back
+into one trajectory and only contiguous blocks concatenate in shard order into the *input's* frame
+order — which is what every per-frame array derived from the same trajectory (energies, forces,
+scores, held-out frame indices) is indexed by. Velocity draws are keyed to the absolute frame
+index, so rerunning one shard reproduces exactly the frames it owned.
 
 ## Starting a new system
 
@@ -153,8 +254,8 @@ md-sim-cgschnet-dataset --run data/trp-cage/AMBER14_implicit_300K \
 ```
 
 Out comes an `.h5` that mlcg's training script reads directly, plus the same arrays as
-`.npy` if you want to poke at them. Forces stream from disk in blocks, so a 341 MB
-`forces.txt` never has to fit in memory.
+`.npy` if you want to poke at them. Forces are memory-mapped and read in blocks, so a
+multi-GB `forces.npy` never has to fit in memory.
 
 Three things to know:
 
@@ -326,8 +427,10 @@ definition.
 
 - **Umbrella sampling**, a specialised grid workflow with its own CLI:
   `md-sim-umbrella input.pdb --num-grid-points 36 --output-dir out`
-- **Prep helpers** in `md_simulations.prep`: `martini_cg_map` (CG mapping matrix, needs the
-  `martini` extra), `itp_bonds_to_pdb` (CONECT records from an ITP), and the vendored
+- **Prep helpers** in `md_simulations.prep`: `extract_frames` (frames of a trajectory out as
+  PDBs, i.e. starting structures for new runs: `md-sim-extract-frames --trajectory t.trr
+  --topology top.pdb --frames 0 1 2 -o data/pdbs/start`), `martini_cg_map` (CG mapping matrix,
+  needs the `martini` extra), `itp_bonds_to_pdb` (CONECT records from an ITP), and the vendored
   `olives` script. The CGSchNet ones — `cgschnet_map`, `cgschnet_embeddings`,
   `cgschnet_reexport`, `cgschnet_dataset` — are covered above.
 
