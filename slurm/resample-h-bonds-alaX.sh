@@ -28,13 +28,22 @@
 # keeps the 42 it was resampled with). One seed shared by all replicas would give frame i of every
 # replica the same X-H noise draw, correlating, e.g., a training and a holdout frame at the same
 # index. Do not pass a per-replica SEED to this script: it is read only as the base.
+#
+# REMD_RUNS (default empty) adds the T-REMD runs of slurm/alaX-amber14-implicit-remd-330K.sh, by
+# name: run <name> lives in alaX/ala<n>_AMBER14_implicit_remd_330K-<name>, and only its 330 K target
+# trajectory (the output dir root) is resampled. Seeds: train SEED_BASE + 10, holdout SEED_BASE +
+# 11, any other name SEED_BASE + 12, 13, ... in the order given, clear of the replicas' 0-3.
+# REPLICAS="" (set but empty) resamples no replica, for REMD-only calls:
+#
+#   SYSTEMS=8 REPLICAS= REMD_RUNS="train holdout" ./slurm/resample-h-bonds-alaX.sh --dry-run
 
 set -euo pipefail
 
 cd "${SLURM_SUBMIT_DIR:-.}"
 
 SYSTEMS="${SYSTEMS:-2 3 4 5 6 7 8 9 10 11 12 16 24 32}"
-REPLICAS="${REPLICAS:-0}"
+REPLICAS="${REPLICAS-0}"
+REMD_RUNS="${REMD_RUNS:-}"
 SEED_BASE="${SEED_BASE:-${SEED:-42}}"
 TEMPLATE="${TEMPLATE:-configs/alaX-amber14-implicit-unconstrained-330K.yaml}"
 DATA_DIR="${MD_DATA_ROOT:-$PWD/data}/alaX"
@@ -60,6 +69,24 @@ for n in $SYSTEMS; do
             echo "${cmd[*]}"
         else
             echo "=== ala${n} r${k} (seed $((SEED_BASE + k))) ==="
+            "${cmd[@]}"
+        fi
+    done
+
+    other=12
+    for name in $REMD_RUNS; do
+        case $name in
+            train) offset=10 ;;
+            holdout) offset=11 ;;
+            *) offset=$other; other=$(( other + 1 )) ;;
+        esac
+        run="${DATA_DIR}/ala${n}_AMBER14_implicit_remd_330K-${name}"
+
+        cmd=(env "SEED=$((SEED_BASE + offset))" bash slurm/resample-h-bonds.sh "$config" "${run}/trajectory.dcd" "${run}/initial_structure.pdb")
+        if (( DRY_RUN )); then
+            echo "${cmd[*]}"
+        else
+            echo "=== ala${n} remd ${name} (seed $((SEED_BASE + offset))) ==="
             "${cmd[@]}"
         fi
     done
