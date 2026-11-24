@@ -11,7 +11,7 @@
 #     and >= ~50 independent alpha_L episodes reaching 330 K for the slowest residue in the pilot.
 #
 # Same potential, integrator and constraints as r0-r3 and the pilot; PPII start (pdbs/ppii/ala3.pdb, phi -75, psi 145; built with md_simulations.prep.polyalanine).
-# Other temperatures keep energies only. H-resampled by slurm/resample-h-bonds-alaX.sh (REMD_RUNS).
+# Other temperatures keep energies only. X-H bonds equilibrated by slurm/equilibrate-h-bonds-alaX.sh (REMD_RUNS).
 engine: amber
 system: ala3
 output_subdir: alaX/ala3_AMBER14_implicit_remd_330K-holdout

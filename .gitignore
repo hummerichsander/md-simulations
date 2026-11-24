@@ -44,3 +44,8 @@ core.[0-9]*
 examples/*/data/*.npy
 examples/*/data/*.dcd
 examples/*/data/*.trr
+
+# Per-system configs rendered from a template by the slurm dispatchers (e.g.
+# equilibrate-h-bonds-alaX.sh expanding alaX-amber14-implicit-unconstrained-330K.yaml). They must
+# outlive the dispatcher because the array job reads the path later, but they are reproducible.
+configs/generated/

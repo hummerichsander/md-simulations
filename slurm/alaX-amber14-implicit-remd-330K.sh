@@ -24,7 +24,7 @@
 # Two modes in one file, as in alaX-amber14-implicit-330K-replicas.sh:
 #
 #   Submit (run it directly; one sbatch per length and run, then, for train/holdout, one
-#   H-resampling job per length that waits for that length's runs with afterok):
+#   X-H equilibration array per length that waits for that length's runs with afterok):
 #
 #     ./slurm/alaX-amber14-implicit-remd-330K.sh --dry-run
 #     SYSTEMS="2 3" ./slurm/alaX-amber14-implicit-remd-330K.sh                 # pilots
@@ -38,7 +38,14 @@
 # Every axis is env-overridable and space-separated: SYSTEMS (default "2 3 5 8"), RUNS (default
 # "pilot"). RESUME=1 passes --resume, which continues each run from its checkpoint/ (same platform
 # as the run started on); without it, a run whose output dir holds a checkpoint fails rather than
-# overwrites. H-resampling never follows a pilot, and is skipped entirely with NO_RESAMPLE=1.
+# overwrites. X-H equilibration never follows a pilot, and is skipped entirely with
+# NO_EQUILIBRATE=1 (NO_RESAMPLE=1 is still honoured, since it used to mean this step).
+#
+# That step is slurm/equilibrate-h-bonds-alaX.sh, not the analytic resampler it used to be:
+# it samples p(x_H | x_heavy) in the real unconstrained potential instead of drawing each
+# length from an isolated-harmonic Gaussian. It costs dynamics per frame -- reach for STRIDE
+# on a long run -- and writes <trajectory>_hequilibrated_sNN.trr, one shard per array task,
+# where the resampler wrote a single trajectory_hresampled.trr.
 #
 # At most MAX_PARALLEL (default 3) of these GPU jobs run at once: jobs are dealt round-robin onto
 # MAX_PARALLEL lanes, each waiting for the previous job of its lane with afterany, so a failed run
@@ -57,7 +64,7 @@ if [[ -z ${CONFIG:-} ]]; then
     SYSTEMS="${SYSTEMS:-2 3 5 8}"
     RUNS="${RUNS:-pilot}"
     RESUME="${RESUME:-0}"
-    NO_RESAMPLE="${NO_RESAMPLE:-0}"
+    NO_EQUILIBRATE="${NO_EQUILIBRATE:-${NO_RESAMPLE:-0}}"
     MAX_PARALLEL="${MAX_PARALLEL:-3}"
     SELF="slurm/alaX-amber14-implicit-remd-330K.sh"
 
@@ -71,7 +78,7 @@ if [[ -z ${CONFIG:-} ]]; then
     count=0
     for n in $SYSTEMS; do
         ids=()
-        resample_runs=()
+        postprocess_runs=()
         for run in $RUNS; do
             config="configs/ala${n}-amber14-implicit-remd-330K-${run}.yaml"
             [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
@@ -92,19 +99,23 @@ if [[ -z ${CONFIG:-} ]]; then
             lane_last[$lane]="$id"
             if [[ $run != pilot ]]; then
                 ids+=("$id")
-                resample_runs+=("$run")
+                postprocess_runs+=("$run")
             fi
         done
 
-        (( NO_RESAMPLE )) && continue
+        (( NO_EQUILIBRATE )) && continue
         (( ${#ids[@]} )) || continue
-        # One resampling job per length, after all of that length's production runs succeeded.
+        # X-H equilibration per length, after all of that length's production runs succeeded. The
+        # dispatcher submits one array per run and needs the submit node, so it is called here
+        # rather than sbatched: the dependency goes to the arrays themselves.
         dep="afterok:$(IFS=:; echo "${ids[*]}")"
+        equilibrate=(env "SYSTEMS=$n" "REPLICAS=" "REMD_RUNS=${postprocess_runs[*]}" "DEPENDENCY=$dep"
+                     ./slurm/equilibrate-h-bonds-alaX.sh)
         if (( DRY_RUN )); then
-            echo "SYSTEMS=${n} REPLICAS= REMD_RUNS=\"${resample_runs[*]}\" sbatch --dependency=${dep} slurm/resample-h-bonds-alaX.sh"
+            echo "${equilibrate[*]} --dry-run"
+            "${equilibrate[@]}" --dry-run
         else
-            SYSTEMS="$n" REPLICAS="" REMD_RUNS="${resample_runs[*]}" \
-                sbatch --dependency="$dep" slurm/resample-h-bonds-alaX.sh
+            "${equilibrate[@]}"
         fi
     done
     exit 0
