@@ -149,7 +149,7 @@ def format_pdb(
     :param chain: Chain identifier.
     :return: The complete PDB text."""
     lines = [
-        f"REMARK   1 CAPPED POLYALANINE, {n_residues} ALA RESIDUES, IDEAL ALPHA-HELIX",
+        f"REMARK   1 CAPPED POLYALANINE, {n_residues} ALA RESIDUES, IDEAL BACKBONE GEOMETRY",
         f"REMARK   1 SEQUENCE: ACE-(ALA){n_residues}-NME",
         f"REMARK   1 BACKBONE DIHEDRALS: PHI={phi} PSI={psi} OMEGA={omega} (DEGREES)",
         "REMARK   1 HEAVY ATOMS ONLY -- ADD HYDROGENS DURING FF PARAMETERIZATION",

@@ -57,8 +57,7 @@ def state_series(cv: np.ndarray, q_unfolded: float, q_folded: float) -> np.ndarr
     :raises ValueError: If the cores overlap."""
     if q_unfolded >= q_folded:
         raise ValueError(
-            f"Cores overlap: q_unfolded={q_unfolded:.3f} must be below "
-            f"q_folded={q_folded:.3f}."
+            f"Cores overlap: q_unfolded={q_unfolded:.3f} must be below q_folded={q_folded:.3f}."
         )
     cv = np.asarray(cv, dtype=float)
     marks = np.full(cv.shape, UNASSIGNED, dtype=np.int8)
@@ -228,9 +227,7 @@ def block_bootstrap(
     return float(np.percentile(means, half)), float(np.percentile(means, 100.0 - half))
 
 
-def integrated_autocorr_time(
-    x: np.ndarray, dt_ps: float, c: float = 6.0
-) -> tuple[float, int]:
+def integrated_autocorr_time(x: np.ndarray, dt_ps: float, c: float = 6.0) -> tuple[float, int]:
     """Integrated autocorrelation time by Sokal's automatic windowing, in ns.
 
     The window is the smallest ``M`` with ``M >= c * tau(M)``; summing the noisy tail
@@ -488,8 +485,7 @@ def melting_curve(
     p = np.asarray(p_folded, dtype=float)
     usable = np.isfinite(p) & (p > 0.0) & (p < 1.0)
     censored = [
-        {"temperature": float(t), "p_folded": float(v)}
-        for t, v in zip(T[~usable], p[~usable])
+        {"temperature": float(t), "p_folded": float(v)} for t, v in zip(T[~usable], p[~usable])
     ]
     if usable.sum() < 3:
         return {
@@ -610,8 +606,7 @@ def analyse_run(
     }
 
     per_segment = [
-        merge_events(state_series(cv, q_unfolded, q_folded), min_dwell_frames)
-        for cv in cv_segments
+        merge_events(state_series(cv, q_unfolded, q_folded), min_dwell_frames) for cv in cv_segments
     ]
     raw = [state_series(cv, q_unfolded, q_folded) for cv in cv_segments]
 
@@ -670,12 +665,8 @@ def analyse_run(
             else None
         ),
         "reverse_cumulative_start": rc_start.tolist(),
-        "reverse_cumulative_p_folded": [
-            None if np.isnan(v) else float(v) for v in rc_pop
-        ],
-        "sampling_adequate": bool(
-            min(n_uf, n_fu) >= 10 and min(p_folded, p_unfolded) >= 0.15
-        ),
+        "reverse_cumulative_p_folded": [None if np.isnan(v) else float(v) for v in rc_pop],
+        "sampling_adequate": bool(min(n_uf, n_fu) >= 10 and min(p_folded, p_unfolded) >= 0.15),
     }
 
     if do_cutoff_scan:
@@ -721,9 +712,7 @@ def plot_basins(
         pass
 
     n = len(results)
-    fig, axes = plt.subplots(
-        n, 3, figsize=(6.9, 1.8 * n), constrained_layout=True, squeeze=False
-    )
+    fig, axes = plt.subplots(n, 3, figsize=(6.9, 1.8 * n), constrained_layout=True, squeeze=False)
     for row, res in enumerate(results):
         T = res["temperature"]
         segments = cv_by_temperature[T]
@@ -754,9 +743,7 @@ def plot_basins(
         ax = axes[row][2]
         if res.get("reverse_cumulative_p_folded") is not None:
             start = np.asarray(res["reverse_cumulative_start"], dtype=float)
-            pop = np.array(
-                [np.nan if v is None else v for v in res["reverse_cumulative_p_folded"]]
-            )
+            pop = np.array([np.nan if v is None else v for v in res["reverse_cumulative_p_folded"]])
             ax.plot(start, pop)
             if res.get("p_folded") is not None and np.isfinite(res.get("sigma_p", np.nan)):
                 ax.axhspan(
@@ -899,17 +886,11 @@ def main() -> None:
         help="Minimum dwell for a basin visit to count as an event (default 2000).",
     )
     parser.add_argument("--n-blocks", type=int, default=5, help="Stationarity blocks.")
-    parser.add_argument(
-        "--n-bootstrap", type=int, default=2000, help="Block-bootstrap resamples."
-    )
+    parser.add_argument("--n-bootstrap", type=int, default=2000, help="Block-bootstrap resamples.")
     parser.add_argument("--bins", type=int, default=90, help="FES histogram bins.")
     parser.add_argument("--sigma", type=float, default=2.0, help="FES smoothing in bins.")
-    parser.add_argument(
-        "--f-max", type=float, default=7.0, help="FES plotting ceiling in kT."
-    )
-    parser.add_argument(
-        "--cutoff-scan", action="store_true", help="Scan the core-cutoff grid."
-    )
+    parser.add_argument("--f-max", type=float, default=7.0, help="FES plotting ceiling in kT.")
+    parser.add_argument("--cutoff-scan", action="store_true", help="Scan the core-cutoff grid.")
     parser.add_argument(
         "--msm-lags",
         type=int,
@@ -1000,11 +981,7 @@ def main() -> None:
     print(f"Wrote {json_path}")
 
     if args.plot:
-        label = (
-            r"Fraction of native contacts $Q$"
-            if args.cv == "native_contacts"
-            else args.cv
-        )
+        label = r"Fraction of native contacts $Q$" if args.cv == "native_contacts" else args.cv
         fig_path = out_dir / f"{args.prefix}_basins.pdf"
         plot_basins(
             results,
