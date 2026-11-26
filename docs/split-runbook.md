@@ -95,7 +95,7 @@ git log --oneline -3 && git status --short        # two new commits, clean tree
 ls data                                            # the moved entries, plus README.md
 ls beamtime                                        # the moved run store
 ls slurm | wc -l                                   # 20: 13 orchestration, 3 kept, 3 *.example, output/
-uv lock && uv sync --extra cu130 --torch-backend=cu130
+uv lock && uv sync --extra cu130
 .venv/bin/md-sim config ls | head
 .venv/bin/md-sim check-job slurm/alaX-amber14-implicit-remd-330K.sh
 ```

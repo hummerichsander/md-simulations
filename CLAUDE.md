@@ -10,7 +10,8 @@ overrides for this project:
 - The `cgschnet` extras depend on **plain `mlcg`** and leave the CUDA line to the
   top-level project; `mlcg[cu130]` (torch 2.11 + the CUDA-13 wheel indexes) is the
   separate, orthogonal `cu130` extra. Locally that means
-  `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer pinning
+  `uv sync --extra cgschnet --extra cu130` (the extra pins the CUDA-13 wheel indexes,
+  so no `--torch-backend` flag is needed -- and `uv sync` does not accept one); a consumer pinning
   its own torch (e.g. split-flows at torch 2.9.1/cu128) takes `cgschnet` alone. Never
   put `mlcg[cu130]` back into a `cgschnet*` extra — that coupling is what forced
   split-flows into a second venv.

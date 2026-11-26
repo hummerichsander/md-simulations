@@ -24,7 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 # The CUDA-13 stack for the cluster's cuda/13.0: the CUDA-13 OpenMM platform (a
 # `platform: CUDA` job needs it, otherwise it silently has no GPU) and the CUDA-13 torch for
-# CGSchNet. Install with `uv sync --extra cu130 --torch-backend=cu130`; needs the cu130 index
+# CGSchNet. Install with `uv sync --extra cu130`; needs the cu130 index
 # blocks below. On a host without a GPU, leave it out.
 cu130 = ["md-simulations[cu130]"]
 
@@ -72,7 +72,7 @@ constraint-dependencies = [
 index-strategy = "unsafe-best-match"
 
 # CUDA-13 wheels for the `cu130` extra. Explicit, so they are only consulted when a package is
-# pinned to them; `--torch-backend=cu130` supplies the torch pin.
+# pinned to them; the `cu130` extra supplies the torch pin.
 [[tool.uv.index]]
 name = "torch-cu130"
 url = "https://download.pytorch.org/whl/cu130"

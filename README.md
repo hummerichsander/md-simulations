@@ -263,10 +263,11 @@ is plain `mlcg` and leaves the CUDA line alone; the CUDA-13 wheel set that match
 cluster is the separate `cu130` extra:
 
 ```bash
-uv sync --extra cgschnet --extra cu130 --torch-backend=cu130
+uv sync --extra cgschnet --extra cu130
 ```
 
-On a CUDA-12 host, drop `--extra cu130` and install torch with `--torch-backend=cu128`.
+On a CUDA-12 host, drop `--extra cu130`; torch then resolves from PyPI, and
+`UV_TORCH_BACKEND=cu128` selects that wheel set if you need it pinned.
 A project that consumes md-simulations and pins its own torch takes `--extra cgschnet`
 alone. Jobs activate the same `.venv` as every other engine.
 
@@ -300,7 +301,7 @@ which needs coarse-grained coordinates paired with the forces that belong to the
 Projecting coordinates is easy; projecting forces is where people lose an afternoon:
 
 ```bash
-uv sync --extra cgschnet-dataset --extra cu130 --torch-backend=cu130
+uv sync --extra cgschnet-dataset --extra cu130
 md-sim-cgschnet-dataset --run data/trp-cage/AMBER14_implicit_300K \
     --bead-pdb data/pdbs/2JOF_5B-CG.pdb --out data/trp-cage/fm_300K \
     --cgschnet-config trpcage-cgschnet-300K.yaml --name trpcage
@@ -402,7 +403,7 @@ rather than an ASE wrapper (`build_calculator` raises here). Both satisfy the sa
 `PotentialLike` protocol, so callers can't tell.
 
 ```bash
-uv sync --extra cgschnet-potentials --extra cu130 --torch-backend=cu130
+uv sync --extra cgschnet-potentials --extra cu130
 ```
 
 (`cu130` only when md-simulations is the top-level project; a consumer with its own torch

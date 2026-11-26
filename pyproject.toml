@@ -67,8 +67,8 @@ openmm-cuda = [
 ]
 # The CUDA-13 wheel set for the cgschnet stack, matching the cluster's cuda/13.0.
 # Orthogonal to the cgschnet extras: add it when this project *is* the top-level one
-# and needs the CUDA-13 torch, and install torch with the matching backend
-# (`uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`). It needs the
+# and needs the CUDA-13 torch (`uv sync --extra cgschnet --extra cu130`; the extra
+# pins the wheel indexes, so no --torch-backend is needed). It needs the
 # [tool.uv] index setup below. A consumer that pins its own torch takes `cgschnet`
 # alone and keeps its CUDA line. Includes `openmm-cuda`, since a CUDA-13 host wants
 # the CUDA-13 OpenMM platform too.
@@ -103,7 +103,7 @@ prep = ["mdtraj>=1.10.3", "networkx>=3.0"]
 # consumer calling build_potential_from_file on an OpenMM config takes
 # `openmm-potentials` instead. `torch` is deliberately not pinned to an index (see
 # [tool.uv.sources]), so it resolves from PyPI unless the top-level project says
-# otherwise -- e.g. `--torch-backend=cu130` or `=cpu`.
+# otherwise -- e.g. by taking the `cu130` extra, or via UV_TORCH_BACKEND.
 torch-potentials = ["torch>=2.0", "ase>=3.22", "mdtraj>=1.10.3"]
 # What a consumer needs to call `build_potential_from_file` on an AMBER/AWSEM config:
 # the torch wrapper plus the MD stack that builds the OpenMM system (OpenMMCalculator).
@@ -132,8 +132,8 @@ cgschnet-dataset = [
     "h5py>=3.10",
 ]
 # Everything at once. NOTE: `all` includes `cu130`, so it inherits the heavy CUDA-13
-# torch stack and needs the [tool.uv] cu130 index setup below (and a CUDA-13 host, or
-# a `--torch-backend` override) -- same constraint the standalone `cu130` extra
+# torch stack and needs the [tool.uv] cu130 index setup below (and a CUDA-13 host)
+# -- same constraint the standalone `cu130` extra
 # carries. Drop `cu130` from the list to keep a different CUDA line.
 all = [
     "md-simulations[simulate,awsem,martini,gromacs,cgschnet,cu130,viz,analysis,prep,openmm-potentials,mcp]",
@@ -229,7 +229,7 @@ mlcg = { git = "https://github.com/ClementiGroup/mlcg.git", rev = "b0162fe8604e2
 # line on every consumer -- and mixing it with PyPI-resolved nvidia-* wheels yields
 # an inconsistent stack (missing libcudnn.so.9 / libcusparseLt.so.0, i.e. `import
 # torch` fails outright). The CUDA line is the top-level project's call: here, install
-# with `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer that
+# with `uv sync --extra cgschnet --extra cu130`; a consumer that
 # pins its own torch takes `cgschnet` without `cu130` and adds its own index pins. The
 # index definitions are kept (explicit, so they are only consulted when something is
 # pinned to them).

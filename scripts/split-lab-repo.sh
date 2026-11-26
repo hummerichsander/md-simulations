@@ -434,7 +434,7 @@ Then re-point $DATA_ROOT/cgschnet-data at $DEST/data (it still targets md-simula
 
 and build its environment yourself, outside Claude Code (its sandbox cannot write the uv cache):
 
-    cd $DEST && uv lock && uv sync --extra cu130 --torch-backend=cu130
+    cd $DEST && uv lock && uv sync --extra cu130
 
 EOF
 if [ "$DRY_RUN" -eq 1 ]; then
