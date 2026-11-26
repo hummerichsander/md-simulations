@@ -1,8 +1,7 @@
-Draft `CLAUDE.md` for the lab repo `/remote/gpu04/hummerich/projects/simulations`, to be copied there
-by the user (D2 of `docs/plans/split-package-and-lab.md`; `scripts/split-lab-repo.sh` removes the
-package's `CLAUDE.md` from the clone and does not place this one). Delete this paragraph when pasting.
-Install the companion pieces too: `docs/lab-repo-job-skill.md` as `.claude/skills/write-job/SKILL.md`,
-and the `.gitignore` edit under "Committing the skill" in that file.
+Draft `CLAUDE.md` for the lab repo `/remote/gpu04/hummerich/projects/simulations` (D2 of
+`docs/plans/split-package-and-lab.md`). `scripts/split-lab-repo.sh` installs everything from the
+`# simulations` title below as the clone's `CLAUDE.md`, together with the write-job skill
+(`docs/lab-repo-job-skill.md`). Nothing to do by hand.
 
 # simulations
 

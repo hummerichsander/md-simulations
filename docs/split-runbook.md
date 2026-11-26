@@ -21,8 +21,10 @@ a real, git-ignored directory; `data_root: ${MD_DATA_ROOT:-./data}` in `md-works
    It must carry the W2 and P2 work: configs without `slurm:` blocks and the `docs/lab-repo-*` drafts
    (the script checks both). `main` qualifies only after that work is merged; until then run it from
    `split-package-and-lab`, or set `SPLIT_BRANCH`. The new repo's branch is always named `main`.
-3. **Settle the data split** (below). Every top-level entry of `data/` must be assigned to the lab or,
-   deliberately, to the shared root, otherwise the script stops before changing anything.
+3. **Run the script plain.** The data split is settled: everything in `data/` (`ala2 alaX cln models
+   pdbs trp-cage`) goes to the lab repo, `models/` included, and that is the script's default. Set no
+   `SPLIT_DATA_*` variable. The script still stops before changing anything if a top-level entry of
+   `data/` is not assigned (a new directory appeared since).
 4. **No running jobs.** `beamtime/` and `data/` are moved while nothing writes to them: no
    `md-sim run`, no `beamtime serve`, no job in the queue that will start meanwhile. Run records and
    configs hold absolute paths (`.../md-simulations/data/...`, `.../md-simulations/beamtime/...`) from
@@ -45,30 +47,23 @@ Contents of `md-simulations/data/` (inspected read-only; sizes from `du`):
 | `trp-cage/` | 13 G | Trp-cage runs (`AMBER14_implicit_seeded_330K_rNN`, scans, `CGSchNet_*`), `analysis_*`, `fm_*`, `configurations.pt` | lab |
 | `ala2/` | 4.1 G | the first ala2 run (`AMBER14_implicit_330K`) | lab |
 | `pdbs/` | 3 MB | 69 starting and CG-bead structures the configs read (`data/pdbs/...`, 8 config references) | lab (inputs of the configs; the root already has an unrelated `pdbs/`, so it could not go there anyway) |
-| `models/` | 1.4 G | `cgschnet/`: trained CGSchNet checkpoints (56 `ckpt`) and the merged model+prior `.pt` files, written by the `*-cgschnet-scratch-*` scripts and read by 18 config references and by split-flows-energetics | lab by default; see below |
+| `models/` | 1.4 G | `cgschnet/`: trained CGSchNet checkpoints (56 `ckpt`) and the merged model+prior `.pt` files, written by the `*-cgschnet-scratch-*` scripts and read by 18 config references and by split-flows-energetics | lab (confirmed) |
 
 Everything under the four run directories is raw or run-adjacent simulation output, so it belongs to
-the lab. The only top-level entry that is wholly a *derived* artifact is `models/`. It is kept in the
-lab by default because (a) configs and the scratch-training scripts address it as `data/models/...`,
-so moving it changes no path, and (b) a dataset in the shared root is not done until it has a
-`datacard.yaml`, which the script cannot write truthfully. If you want it in the root anyway:
+the lab, and so does `models/`: configs and the scratch-training scripts address it as `data/models/...`
+(moving it changes no path), and a dataset in the shared root is not done until it has a
+`datacard.yaml`. Derived datasets nested inside the run directories (`alaX/*_fm_330K`, `*/analysis_*`)
+stay in place too: the scripts and configs address them by those paths.
 
-```bash
-SPLIT_DATA_LAB="ala2 alaX cln pdbs trp-cage" SPLIT_DATA_SHARED="models=cgschnet-models" \
-    bash scripts/split-lab-repo.sh
-```
-
-That moves it to `/remote/gpu04/hummerich/data/cgschnet-models` and leaves a `data/models` symlink in
-the lab so config paths still resolve; you then write its `datacard.yaml` (`kind: derived`) and run
-`check-datacards.py`. Derived datasets nested inside the run directories (`alaX/*_fm_330K`,
-`*/analysis_*`) stay in place: the scripts and configs address them by those paths.
+(The script can instead send an entry to the shared root with `SPLIT_DATA_SHARED="name=target"`; the
+decision is not to, so do not set it.)
 
 ## Run it
 
 ```bash
 cd /remote/gpu04/hummerich/projects/md-simulations
 bash scripts/split-lab-repo.sh --dry-run    # prints every precondition and every command; exit 1 if a real run would refuse
-bash scripts/split-lab-repo.sh
+bash scripts/split-lab-repo.sh              # plain: no SPLIT_DATA_* variable, the defaults are the decided split
 ```
 
 `SPLIT_PARENT`, `SPLIT_BRANCH`, `SPLIT_DATA_LAB`, `SPLIT_DATA_SHARED` and `SPLIT_DATA_ROOT` override the
@@ -76,8 +71,10 @@ defaults; the script header documents them. All preconditions run before anythin
 one stops the script with nothing touched.
 
 What it does, in order: clones the branch (`--single-branch`, history kept, `origin` removed);
-removes `src/ tests/ examples/ docs/ scripts/ uv.lock CLAUDE.md` and installs `pyproject.toml` and
-`README.md` from the drafts (commit 1); writes `md-workspace.yaml` and `sites/hd-gpu-cluster.yaml`;
+removes `src/ tests/ examples/ docs/ scripts/ uv.lock CLAUDE.md`, installs `pyproject.toml`, `README.md`,
+`CLAUDE.md` and `.claude/skills/write-job/SKILL.md` from the drafts and narrows `.gitignore`'s `.claude` rule
+to `.claude/*` + `!.claude/skills/` so the skill is committed (commit 1); writes `md-workspace.yaml`,
+`sites/hd-gpu-cluster.yaml` and a short `data/README.md` of its own;
 installs `.mcp.json`; copies three scripts to `slurm/*.sh.example`, deletes 14 one-line scripts and
 creates `slurm/output/` (commit 2); then the two moves, last: `beamtime/`, then each `data/` entry.
 Commits and clone come first so that a failure there leaves `md-simulations` untouched.
@@ -128,7 +125,7 @@ git push -u origin main
 
 Untracked, ignored files stay here and are yours to move or delete: `slurm/output/` (job logs),
 `configs/generated/` (per-system configs rendered by the h-bond dispatchers), `.mcp.json`, and the
-emptied `data/` (its `README.md` is tracked here and in the clone). Two orchestration scripts end with a
+emptied `data/` (its `README.md` stays tracked here until S4; the clone has its own, rewritten one). Two orchestration scripts end with a
 hint naming a deleted one-liner (`slurm/ala2-cgschnet-330K.sh` in `ala2-cgschnet-scratch-330K.sh`,
 `slurm/alaX-cgschnet-330K.sh` in `alaX-cgschnet-scratch-330K.sh`); the hint is text only, fix it by hand.
 
@@ -137,6 +134,5 @@ hint naming a deleted one-liner (`slurm/ala2-cgschnet-330K.sh` in `ala2-cgschnet
 1. Tell the planning session the clone exists; S4 (delete the lab half from the package) runs next. S4
    removes `.mcp.json` from this checkout, which is untracked, so it uses `rm`, not `git rm`.
 2. Paste `docs/workspace-md-draft.md` into `claude-instructions/workspace.md` (you edit that file).
-3. S4 deletes the `docs/lab-repo-*` and workspace drafts once they have landed. D2's `lab-repo-CLAUDE.md` and
-   job skill are drafts too; the script does not place them, copy them in by hand (it removes the
-   package's `CLAUDE.md` from the clone, so the lab repo has none until then).
+3. S4 deletes the `docs/lab-repo-*` and workspace drafts; the script has already installed what the lab
+   repo needs from them.

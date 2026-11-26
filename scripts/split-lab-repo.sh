@@ -154,7 +154,7 @@ precondition() { # <description> <command...>
 # A draft from the source branch, exactly as committed there (not the working tree).
 draft() { git -C "$SRC" show "$BRANCH:$1"; }
 
-# Drop the "delete these lines when pasting" preamble from the two drafts.
+# Drop the "delete these lines when pasting" preamble from the drafts.
 strip_readme_preamble() {
     awk '
         /^Draft README for the lab repo/ { skip = 1 }
@@ -162,6 +162,10 @@ strip_readme_preamble() {
         drop_blank && /^$/ { drop_blank = 0; next }
         { print }'
 }
+# CLAUDE.md draft: everything before its own `# simulations` title is preamble.
+strip_claude_preamble() { awk '/^# simulations$/ { on = 1 } on { print }'; }
+# Skill draft: the file proper starts at the first `---` (the frontmatter fence).
+strip_skill_preamble() { awk '/^---$/ { on = 1 } on { print }'; }
 strip_pyproject_preamble() {
     awk '
         !done { if (/Delete these three comment lines/) { done = 1; drop_hash = 1 } next }
@@ -185,8 +189,8 @@ precondition "$SRC is a git checkout" git -C "$SRC" rev-parse --git-dir
 precondition "a branch to clone is known (SPLIT_BRANCH, or not a detached HEAD)" test -n "$BRANCH"
 if [ -n "$BRANCH" ]; then
     precondition "branch '$BRANCH' exists" git -C "$SRC" rev-parse --verify -q "refs/heads/$BRANCH"
-    precondition "branch carries docs/lab-repo-pyproject.toml, lab-repo-mcp.json and lab-repo-README.md" \
-        bash -c 'for f in pyproject.toml mcp.json README.md; do
+    precondition "branch carries the docs/lab-repo-* drafts (pyproject.toml, mcp.json, README.md, CLAUDE.md, job-skill.md)" \
+        bash -c 'for f in pyproject.toml mcp.json README.md CLAUDE.md job-skill.md; do
                      git -C "$1" cat-file -e "$2:docs/lab-repo-$f" || exit 1; done' _ "$SRC" "$BRANCH"
     precondition "branch has no 'slurm:' block left in configs/ (W2 is on it)" \
         bash -c '! git -C "$1" grep -q "^slurm:" "$2" -- configs' _ "$SRC" "$BRANCH"
@@ -283,26 +287,56 @@ run git clone --quiet --no-local --single-branch --branch "$BRANCH" "$SRC" "$DES
 run git -C "$DEST" remote remove origin
 [ "$BRANCH" = main ] || run git -C "$DEST" branch -m "$BRANCH" main
 
-say "2. Remove the package half and install the lab pyproject.toml and README"
+say "2. Remove the package half; install the lab pyproject.toml, README, CLAUDE.md and write-job skill"
 run git -C "$DEST" rm -r -q --ignore-unmatch src tests examples docs scripts uv.lock CLAUDE.md
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "+ draft docs/lab-repo-pyproject.toml | strip preamble > $DEST/pyproject.toml"
     echo "+ draft docs/lab-repo-README.md      | strip preamble > $DEST/README.md"
+    echo "+ draft docs/lab-repo-CLAUDE.md      | strip preamble > $DEST/CLAUDE.md"
+    echo "+ draft docs/lab-repo-job-skill.md   | strip preamble > $DEST/.claude/skills/write-job/SKILL.md"
 else
     draft docs/lab-repo-pyproject.toml | strip_pyproject_preamble >"$DEST/pyproject.toml"
     draft docs/lab-repo-README.md | strip_readme_preamble >"$DEST/README.md"
-    if grep -q 'Delete th' "$DEST/pyproject.toml" "$DEST/README.md"; then
+    draft docs/lab-repo-CLAUDE.md | strip_claude_preamble >"$DEST/CLAUDE.md"
+    mkdir -p "$DEST/.claude/skills/write-job"
+    draft docs/lab-repo-job-skill.md | strip_skill_preamble >"$DEST/.claude/skills/write-job/SKILL.md"
+    if grep -q 'Delete th' "$DEST/pyproject.toml" "$DEST/README.md" "$DEST/CLAUDE.md" \
+        "$DEST/.claude/skills/write-job/SKILL.md" ||
+        [ "$(head -n1 "$DEST/CLAUDE.md")" != "# simulations" ] ||
+        [ "$(head -n1 "$DEST/.claude/skills/write-job/SKILL.md")" != "---" ]; then
         die "a draft preamble survived the strip"
     fi
 fi
-run git -C "$DEST" add pyproject.toml README.md
+# The package ignores all of .claude. In the lab repo the skill is committed, so ignore only what
+# is local to a checkout: everything under .claude/ except skills/ (settings.local.json, the
+# harness's .cc-writes droppings, ...).
+run sed -i 's|^\.claude$|.claude/*\n!.claude/skills/|' "$DEST/.gitignore"
+if [ "$DRY_RUN" -eq 0 ] && ! grep -qx '!.claude/skills/' "$DEST/.gitignore"; then
+    die "the .gitignore edit for .claude did not take"
+fi
+run git -C "$DEST" add .gitignore pyproject.toml README.md CLAUDE.md .claude/skills/write-job/SKILL.md
 run git -C "$DEST" commit --quiet -m "Split from md-simulations: drop the package half
 
 The package (src/, tests/, examples/, docs/, uv.lock) stays in md-simulations. This repo keeps
 configs/, slurm/ and the Beamtime log, and installs the package as a dependency."
 
-say "3. Workspace descriptor and site profile"
-run mkdir -p "$DEST/sites"
+say "3. Workspace descriptor, site profile and data/README.md"
+run mkdir -p "$DEST/sites" "$DEST/data"
+emit "$DEST/data/README.md" <<'EOF'
+# Simulation data
+
+This directory is the data root named by `md-workspace.yaml` (`data_root: ${MD_DATA_ROOT:-./data}`,
+relative to the repo root). Everything in it except this README is git-ignored: trajectories,
+checkpoints, trained models and input structures are never committed.
+
+`md-sim run` resolves a config's input paths and `output_subdir` against the data root, so runs
+land in `<system>/<descriptor>/` here. Point a single run elsewhere with `--data-root` or
+`MD_DATA_ROOT`.
+
+Datasets derived from these runs for other projects belong in the shared root
+`/remote/gpu04/hummerich/data`, each with a `datacard.yaml`, not here.
+EOF
+
 emit "$DEST/md-workspace.yaml" <<'EOF'
 config_dir: configs
 data_root: ${MD_DATA_ROOT:-./data}

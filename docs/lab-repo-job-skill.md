@@ -1,17 +1,7 @@
-Draft skill for the lab repo `/remote/gpu04/hummerich/projects/simulations`: copy everything from the
-`---` line below to the end into `.claude/skills/write-job/SKILL.md` there (D2 of
-`docs/plans/split-package-and-lab.md`). Delete this paragraph when pasting.
-
-**Committing the skill.** The lab repo inherits the package's `.gitignore`, which ignores `.claude`
-(and `.mcp.json`, deliberately: it is local to each checkout). With `.claude` ignored the skill cannot
-be committed. Narrow the rule to what is really local, in the lab repo:
-
-```bash
-sed -i 's|^\.claude$|.claude/settings.local.json|' .gitignore
-git add .gitignore .claude/skills/write-job/SKILL.md CLAUDE.md
-```
-
-`scripts/split-lab-repo.sh` does not make this edit; do it by hand after the split.
+Draft skill for the lab repo `/remote/gpu04/hummerich/projects/simulations` (D2 of
+`docs/plans/split-package-and-lab.md`). `scripts/split-lab-repo.sh` installs everything from the `---`
+line below to the end as `.claude/skills/write-job/SKILL.md` there, and narrows the clone's
+`.gitignore` so `.claude/skills/` is committed. Nothing to do by hand.
 
 ---
 name: write-job
