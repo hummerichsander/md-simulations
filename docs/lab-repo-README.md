@@ -97,6 +97,8 @@ constrained bonds".
 
 ## For agents
 
-Read the package's `docs/agents.md` first: enumerate the CLI with `md-sim --help`, author against
-`md-sim config schema`, verify with `md-sim config validate` and `md-sim check-job`, never write
-into the data root, and never submit. D2 adds this repo's own `CLAUDE.md`.
+`CLAUDE.md` is this repo's agent entry point: the workspace layout, the read-only data root, and the
+rule that the agent prepares and verifies jobs while the user submits. `.claude/skills/write-job/`
+holds the write-a-job-script loop (site profile, nearest template, `md-sim check-job`, hand over).
+The package's `docs/agents.md` is the full contract: enumerate the CLI with `md-sim --help`, author
+against `md-sim config schema`, verify with `md-sim config validate` and `md-sim check-job`.

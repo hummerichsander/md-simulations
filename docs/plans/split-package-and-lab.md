@@ -766,7 +766,7 @@ exists in `simulations` with its full history.
    Python and tooling caches, `core.[0-9]*` and `=*`.
 4. README and CLAUDE.md: point at the `simulations` repo for configs, job scripts and the run log.
 
-### D2. Agent instructions for the lab repo (sonnet) — code
+### D2. Agent instructions for the lab repo (sonnet) — code — **done**
 
 - **Touches:** new `docs/lab-repo-CLAUDE.md`, `docs/lab-repo-README.md` (from D1),
   new `docs/lab-repo-job-skill.md`.
