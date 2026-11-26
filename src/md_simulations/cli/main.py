@@ -3,13 +3,13 @@
 ``run`` and ``check-job`` are parsed here. ``prep``, ``analysis`` and ``sampling`` hand
 everything after the verb to the standalone script untouched, so a script's own options
 (including one named ``--json``) never meet this parser. ``config`` is the group for config
-introspection; its verbs register in :data:`CONFIG_VERBS`."""
+introspection; its verbs register in :data:`CONFIG_VERBS` (from ``config_cmds``)."""
 
 import argparse
 import contextlib
 import logging
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 from md_simulations.cli._dispatch import (
@@ -21,15 +21,14 @@ from md_simulations.cli._dispatch import (
     exit_code,
 )
 from md_simulations.cli._output import EXIT_USAGE, emit, fail
+from md_simulations.cli.config_cmds import VERBS as CONFIG_VERBS
 from md_simulations.config import load_config, resolve_data_root
 from md_simulations.preflight import check_job, format_checks
 from md_simulations.workspace import WorkspaceError, load_workspace
 
-CONFIG_SUMMARY = "Inspect and author simulation configs."
-
-# ``md-sim config <verb>``: verb -> (summary, handler taking the argv after the verb and
-# returning an exit code). Empty until the config commands land.
-CONFIG_VERBS: dict[str, tuple[str, Callable[[list[str]], int]]] = {}
+# ``config`` verbs are handlers in ``config_cmds`` (``verb -> (summary, handler(argv) -> int)``);
+# the other groups' verbs are lazy ``module:main`` strings in ``_dispatch.GROUPS``.
+ALL_GROUP_SUMMARIES = {"config": "Inspect and author simulation configs.", **GROUP_SUMMARIES}
 
 TOP_COMMANDS: dict[str, str] = {
     "run": "Run a simulation from a YAML config.",
@@ -168,35 +167,21 @@ def _cmd_check_job(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
-def _group_verbs(group: str) -> dict[str, str]:
-    """Return a group's verbs with their one-line summaries.
+def _group_entries(group: str) -> list[dict]:
+    """Describe a group's verbs, so a listing needs no per-group special case.
 
     :param group: ``config``, ``prep``, ``analysis`` or ``sampling``.
-    :return: Mapping of verb to summary, in table order."""
-    if group == "config":
-        return {verb: summary for verb, (summary, _) in CONFIG_VERBS.items()}
-    return {verb: SUMMARIES[verb] for verb in GROUPS[group]}
-
-
-def _group_summary(group: str) -> str:
-    """Return a group's one-line summary.
-
-    :param group: ``config``, ``prep``, ``analysis`` or ``sampling``.
-    :return: The summary text."""
-    return CONFIG_SUMMARY if group == "config" else GROUP_SUMMARIES[group]
-
-
-def _verb_entry(group: str, verb: str, summary: str) -> dict:
-    """Describe one verb for a listing.
-
-    :param group: The verb's group.
-    :param verb: The verb.
-    :param summary: Its one-line summary.
-    :return: ``{"name", "command", "summary"}`` plus ``"alias"`` for aliased scripts."""
-    entry = {"name": verb, "command": f"md-sim {group} {verb}", "summary": summary}
+    :return: ``{"name", "command", "summary"}`` per verb, plus ``"alias"`` for the verbs that
+        are also a standalone ``md-sim-*`` script (every one but ``config``'s)."""
     if group in GROUPS:
-        entry["alias"] = alias(verb)
-    return entry
+        summaries = {verb: SUMMARIES[verb] for verb in GROUPS[group]}
+    else:
+        summaries = {verb: summary for verb, (summary, _) in CONFIG_VERBS.items()}
+    return [
+        {"name": v, "command": f"md-sim {group} {v}", "summary": s}
+        | ({"alias": alias(v)} if group in GROUPS else {})
+        for v, s in summaries.items()
+    ]
 
 
 def _verb_lines(group: str) -> str:
@@ -204,11 +189,11 @@ def _verb_lines(group: str) -> str:
 
     :param group: The group.
     :return: One ``  verb  summary`` line per verb, or a note when it has none yet."""
-    verbs = _group_verbs(group)
-    if not verbs:
+    entries = _group_entries(group)
+    if not entries:
         return "  (no commands yet)"
-    width = max(len(v) for v in verbs)
-    return "\n".join(f"  {v.ljust(width)}  {s}" for v, s in verbs.items())
+    width = max(len(e["name"]) for e in entries)
+    return "\n".join(f"  {e['name'].ljust(width)}  {e['summary']}" for e in entries)
 
 
 def _surface() -> dict:
@@ -222,8 +207,8 @@ def _surface() -> dict:
         "groups": [
             {
                 "name": g,
-                "summary": _group_summary(g),
-                "verbs": [_verb_entry(g, v, s) for v, s in _group_verbs(g).items()],
+                "summary": ALL_GROUP_SUMMARIES[g],
+                "verbs": _group_entries(g),
             }
             for g in GROUP_ORDER
         ],
@@ -238,10 +223,10 @@ def _cmd_group(args: argparse.Namespace) -> int:
     group = args.group
     payload = {
         "group": group,
-        "summary": _group_summary(group),
-        "verbs": [_verb_entry(group, v, s) for v, s in _group_verbs(group).items()],
+        "summary": ALL_GROUP_SUMMARIES[group],
+        "verbs": _group_entries(group),
     }
-    human = f"md-sim {group}: {_group_summary(group)}\n\n{_verb_lines(group)}"
+    human = f"md-sim {group}: {ALL_GROUP_SUMMARIES[group]}\n\n{_verb_lines(group)}"
     emit(payload, json_mode=args.json, human=human)
     return 0
 
@@ -282,8 +267,8 @@ def _build_parser() -> argparse.ArgumentParser:
     for group in GROUP_ORDER:
         p_group = sub.add_parser(
             group,
-            help=_group_summary(group),
-            description=f"{_group_summary(group)}\n\nVerbs:\n{_verb_lines(group)}",
+            help=ALL_GROUP_SUMMARIES[group],
+            description=f"{ALL_GROUP_SUMMARIES[group]}\n\nVerbs:\n{_verb_lines(group)}",
             epilog=f"md-sim {group} <verb> --help shows a verb's own options.",
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -319,7 +304,7 @@ def _route_verb(group: str, verb: str, rest: list[str]) -> int:
         return dispatch(group, verb, rest)
     if group == "config" and verb in CONFIG_VERBS:
         return CONFIG_VERBS[verb][1](rest)
-    known = ", ".join(_group_verbs(group)) or "none yet"
+    known = ", ".join(e["name"] for e in _group_entries(group))
     exc = ValueError(f"unknown {group} verb {verb!r} (choose from: {known})")
     fail(exc, json_mode="--json" in rest, code=EXIT_USAGE, prog=f"md-sim {group}")
 

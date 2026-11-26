@@ -441,7 +441,7 @@ names stay so the 13 orchestration scripts in the lab repo keep working.
 6. `md-sim run` gains `--json`: on success emit `{"ok": true, "config", "data_root", "output_dir", "engine",
    "system", "steps"}`; the run's own logging is unaffected.
 
-### C2. `md-sim config schema|validate|describe|ls|new` (sonnet) — code
+### C2. `md-sim config schema|validate|describe|ls|new` (sonnet) — code — **done**
 
 - **Touches:** new `src/md_simulations/cli/config_cmds.py`, new-in-C1 `src/md_simulations/cli/main.py` (the
   `config` group), `tests/test_cli.py`.

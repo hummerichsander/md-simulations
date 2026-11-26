@@ -168,10 +168,21 @@ index, so rerunning one shard reproduces exactly the frames it owned.
 ## The `md-sim` command
 
 `md-sim` is one entry point: `md-sim run`, `md-sim check-job`, and the groups `config`, `prep`,
-`analysis` and `sampling` (`config` lists no verbs yet). `md-sim <group>` lists a group's verbs and `md-sim --json` lists the whole
+`analysis` and `sampling`. `md-sim <group>` lists a group's verbs and `md-sim --json` lists the whole
 surface, so nothing has to be known in advance. `md-sim <group> <verb> ...` runs the standalone
 script of the same name with its arguments untouched, so `md-sim prep cgschnet-priors --help` prints
 exactly what `md-sim-cgschnet-priors --help` does; those `md-sim-*` commands stay installed.
+
+`md-sim config` needs only the core install (no openmm) and lets you author and check a config
+without reading its source or running anything:
+
+| Command | What it does |
+|---|---|
+| `config schema [--engine E]` | JSON Schema of the config union (one `oneOf` branch per engine), or of one engine; under `--json` it is the envelope's `payload` |
+| `config validate <cfg>` | exit 0, or exit 1 with every error as `{"loc", "msg", "type"}` |
+| `config describe <cfg> [--data-root P]` | engine, system, resolved `output_dir`, each input path with an `exists` flag, Beamtime group and name, `total_time_ns`, `frame_spacing_ps`, `n_frames`; with no data root it still exits 0 and reports relative paths as not existing |
+| `config ls` | the workspace's configs with engine, system and temperature; a config that fails to load is listed with its error |
+| `config new --from <cfg> --set k=v -o <out> [--force]` | a validated copy with overrides; `k` may be dotted (`replica_exchange.n_replicas`), `v` is a YAML scalar, an unknown field is an error, and comments in the source are not kept |
 
 `--json` is on every `md-sim` command (a script behind a group keeps its own options). It prints one
 JSON object on stdout: `{"ok": true, ...}` on success and `{"ok": false, "error": {"type",

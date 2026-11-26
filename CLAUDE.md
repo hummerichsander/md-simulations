@@ -71,8 +71,10 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `sites/<site>.yaml` (`Site`): where configs, data and the run store live and which cluster this is.
   Nothing else in `src/` may name a partition, a venv path or a data directory. Exported from
   `md_simulations.workspace`, not from `config`.
-- `src/md_simulations/cli/` — the `md-sim` noun/verb dispatcher. `main.py` parses `run`, `check-job`
-  and the `config` group itself; `prep`, `analysis` and `sampling` pass everything after the verb to
+- `src/md_simulations/cli/` — the `md-sim` noun/verb dispatcher. `main.py` parses `run` and `check-job`
+  itself and routes the `config` group to `config_cmds.py` (`schema|validate|describe|ls|new`, a
+  `verb -> (summary, handler)` table, core-only, no alias); `config describe` lists input paths by
+  the field names in its `_INPUT_FIELDS`, so a new path-valued config field is added there; `prep`, `analysis` and `sampling` pass everything after the verb to
   the standalone script via `_dispatch.py`, whose table holds `module:function` *strings* (a verb's
   module is imported only when chosen, so help and listings load no torch/openmm) and sets
   `sys.argv[0]` to `md-sim-<verb>` so usage lines match the alias. `_output.py` is the shared
