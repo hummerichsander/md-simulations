@@ -51,9 +51,20 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
 - Torch imports stay out of the eager import path (see `torch_potentials/__init__.py`)
 - So do openmm and beamtime: `import md_simulations` (and `md_simulations.torch_potentials`,
   `config`, `workspace`, `preflight`, `cli`) imports none of `openmm`, `beamtime`, `tqdm`, `mdtraj`,
-  `torch`, `ase`. `md_simulations.engines` and `md_simulations.core` are the `simulate`-extra half and
-  raise `ModuleNotFoundError` naming that extra (`EXTRA_HINT`); import them inside the function that
-  needs them, never at module scope in the core layer. `tests/test_packaging.py` pins this.
+  `torch`, `ase`. `md_simulations.engines` and the openmm/beamtime-backed names of
+  `md_simulations.core` are the `simulate`-extra half and raise `ModuleNotFoundError` naming that
+  extra (`EXTRA_HINT`); import them inside the function that needs them, never at module scope in
+  the core layer. `core/__init__` resolves its names lazily (`_LAZY` + `__getattr__`, like
+  `torch_potentials`), so the numpy-only submodules (`core.forces`, `core.replica_exchange`,
+  `core.logging`) import without openmm: `prep/migrate_forces.py` and `prep/cgschnet_dataset.py`
+  depend on that. A new `core` name goes into both `__all__` and `_LAZY`. `core.freezing`,
+  `integrators`, `equilibration`, `reporters`, `runner`, `summary`, `remd` and `tracking` need openmm
+  (or beamtime/tqdm). `tests/test_packaging.py` pins this.
+- **Extras**: `[project.dependencies]` is `numpy`, `pydantic`, `pyyaml` and nothing else. `simulate`
+  (openmm, mdtraj, beamtime, tqdm) is the MD half; `torch-potentials` (torch, ase, mdtraj) has no
+  openmm and no beamtime; `openmm-potentials` is both; `prep`, `analysis`, `viz` and `mcp` carry what
+  their modules import. A new third-party import goes into the extra of the module that makes it,
+  never back into `dependencies`. Tests need `simulate`: `uv sync --extra simulate`.
 
 ## Project shape
 

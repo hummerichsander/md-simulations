@@ -577,7 +577,7 @@ down. Until this ticket lands, no arrangement of extras can produce a slim insta
    sys; print(json.dumps(sorted(sys.modules)))"` in a subprocess (a clean interpreter, not the test
    session's polluted one) and asserts the forbidden set is absent.
 
-### P2. Re-layer the dependencies (sonnet + review) — code
+### P2. Re-layer the dependencies (sonnet + review) — code — **done**
 
 - **Touches:** `pyproject.toml` (`dependencies` 16–28, `[project.optional-dependencies]` 30–120,
   `[tool.uv]` 146–180), new `docs/lab-repo-pyproject.toml`, `README.md` (install section), `CLAUDE.md`,

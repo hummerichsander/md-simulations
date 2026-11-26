@@ -10,8 +10,21 @@ potentials and the `md-sim` command; it contains no configs for particular syste
 scripts and no knowledge of any cluster. A research repo that runs campaigns with it keeps those
 itself (see [Workspaces](#workspaces)).
 
+The base install is three dependencies (`numpy`, `pydantic`, `pyyaml`): enough for configs, the
+workspace, the JSON Schema and `md-sim check-job`. What else you need depends on the use:
+
 ```bash
-uv sync
+pip install 'md-simulations[torch-potentials]'   # the differentiable torch wrapper (torch, ase; no openmm)
+pip install 'md-simulations[openmm-potentials]'  # the wrapper on AMBER/AWSEM configs (adds the MD stack)
+pip install 'md-simulations[simulate]'           # run simulations: openmm, mdtraj, beamtime, tqdm
+pip install 'md-simulations[mcp]'                # the agent server, `md-sim mcp`
+```
+
+In a clone, `uv sync --extra simulate` gives a development environment that runs the whole test
+suite (plain `uv sync` installs the dev tools but no MD stack, so `md-sim run` raises an error
+naming the `simulate` extra). Then:
+
+```bash
 md-sim run my-system.yaml --data-root /path/to/data
 ```
 
@@ -219,7 +232,8 @@ beamtime server. `docs/lab-repo-mcp.json` is a draft `.mcp.json` for the `simula
 Pick one with `engine:` in the config. All of them share the same integrators, reporters
 and output files, so the table is mostly about what inputs each needs. `md-sim config schema
 --engine <name>` prints the fields of one engine, and `md-sim config describe <cfg>` shows what a
-config resolves to.
+config resolves to. Every engine needs the `simulate` extra; the last column lists what comes on
+top of it.
 
 | engine | runs | inputs | needs |
 | --- | --- | --- | --- |
@@ -470,7 +484,7 @@ definition.
   PDBs, i.e. starting structures for new runs: `md-sim-extract-frames --trajectory t.trr
   --topology top.pdb --frames 0 1 2 -o data/pdbs/start`), `martini_cg_map` (CG mapping matrix,
   needs the `martini` extra), `itp_bonds_to_pdb` (CONECT records from an ITP), and the vendored
-  `olives` script. The CGSchNet ones — `cgschnet_map`, `cgschnet_embeddings`,
+  `olives` script. They need the `prep` extra (mdtraj, networkx), not the MD stack. The CGSchNet ones — `cgschnet_map`, `cgschnet_embeddings`,
   `cgschnet_reexport`, `cgschnet_dataset` — are covered above.
 
 ## Layout

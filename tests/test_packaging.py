@@ -125,32 +125,80 @@ def test_openmm_engine_dispatch_still_works(monkeypatch: pytest.MonkeyPatch) -> 
     assert _build_openmm_system(cfg, "/data", True) is sentinel
 
 
+_BLOCK_SIMULATE = (
+    "import sys\n"
+    "class Block:\n"
+    "    def find_spec(self, name, path=None, target=None):\n"
+    "        if name.split('.')[0] in ('openmm', 'beamtime'):\n"
+    "            raise ModuleNotFoundError(f'No module named {name!r}', name=name)\n"
+    "sys.meta_path.insert(0, Block())\n"
+)
+
+
 def test_engines_without_openmm_names_the_simulate_extra() -> None:
     """With openmm unimportable, ``import md_simulations.engines`` raises with the hint.
 
     :return: None."""
     proc = _run(
-        "import sys\n"
-        "class Block:\n"
-        "    def find_spec(self, name, path=None, target=None):\n"
-        "        if name.split('.')[0] in ('openmm', 'beamtime'):\n"
-        "            raise ModuleNotFoundError(f'No module named {name!r}', name=name)\n"
-        "sys.meta_path.insert(0, Block())\n"
-        "for mod in ('md_simulations.engines', 'md_simulations.core'):\n"
-        "    try:\n"
-        "        __import__(mod)\n"
-        "    except ModuleNotFoundError as exc:\n"
-        "        assert 'simulate' in str(exc), exc\n"
-        "        assert exc.name in ('openmm', 'beamtime'), exc.name\n"
-        "        print('ok', mod)\n"
-        "    else:\n"
-        "        raise SystemExit(f'{mod} imported without openmm')\n"
-        "    for k in [k for k in sys.modules if k.startswith('md_simulations.')]:\n"
-        "        if k not in ('md_simulations.config', 'md_simulations.workspace'):\n"
-        "            sys.modules.pop(k, None)\n"
+        _BLOCK_SIMULATE + "try:\n"
+        "    import md_simulations.engines\n"
+        "except ModuleNotFoundError as exc:\n"
+        "    assert 'simulate' in str(exc), exc\n"
+        "    assert exc.name in ('openmm', 'beamtime'), exc.name\n"
+        "    print('ok')\n"
+        "else:\n"
+        "    raise SystemExit('engines imported without openmm')\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.split() == ["ok", "md_simulations.engines", "ok", "md_simulations.core"]
+    assert proc.stdout.split() == ["ok"]
+
+
+def test_core_numpy_submodules_import_without_openmm() -> None:
+    """Without openmm, ``md_simulations.core`` imports and its numpy-only submodules resolve.
+
+    ``prep/migrate_forces.py`` and ``prep/cgschnet_dataset.py`` import ``core.forces`` and
+    belong to extras that carry no openmm, so the package ``__init__`` must not import it.
+    ``setup_logger`` is stdlib only and resolves too.
+
+    :return: None."""
+    proc = _run(
+        _BLOCK_SIMULATE + "import md_simulations.core\n"
+        "from md_simulations.core.forces import FORCES_FILE, ForceWriter, read_forces\n"
+        "from md_simulations.core.replica_exchange import swap_probability\n"
+        "from md_simulations.core import setup_logger\n"
+        "import md_simulations.prep.migrate_forces, md_simulations.prep.cgschnet_dataset\n"
+        "assert 'openmm' not in sys.modules\n"
+        "print('ok')\n"
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == ["ok"]
+
+
+@pytest.mark.parametrize("name", ["create_integrator", "start_run", "ReplicaExchange"])
+def test_core_simulate_names_raise_the_hint_on_access(name: str) -> None:
+    """An openmm- or beamtime-backed ``core`` name raises the ``simulate`` hint on first access.
+
+    :param name: Re-exported name (parametrised).
+    :return: None."""
+    proc = _run(
+        _BLOCK_SIMULATE + "import md_simulations.core as core\n"
+        "try:\n"
+        f"    core.{name}\n"
+        "except ModuleNotFoundError as exc:\n"
+        "    assert exc.args[0] == core.EXTRA_HINT, exc\n"
+        "    assert exc.name in ('openmm', 'beamtime'), exc.name\n"
+        "    print('ok')\n"
+        "else:\n"
+        f"    raise SystemExit('{name} resolved without openmm')\n"
+        "try:\n"
+        f"    from md_simulations.core import {name}\n"
+        "except ModuleNotFoundError as exc:\n"
+        "    assert exc.args[0] == core.EXTRA_HINT, exc\n"
+        "else:\n"
+        f"    raise SystemExit('from-import of {name} resolved without openmm')\n"
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == ["ok"]
 
 
 def test_extra_hint_is_shared() -> None:
