@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "beamtime": {
+      "type": "stdio",
+      "command": "/remote/gpu04/hummerich/projects/simulations/.venv/bin/beamtime",
+      "args": [
+        "--root",
+        "/remote/gpu04/hummerich/projects/simulations",
+        "mcp"
+      ],
+      "env": {}
+    },
+    "md-simulations": {
+      "type": "stdio",
+      "command": "/remote/gpu04/hummerich/projects/simulations/.venv/bin/md-sim",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "MD_WORKSPACE": "/remote/gpu04/hummerich/projects/simulations"
+      }
+    }
+  }
+}

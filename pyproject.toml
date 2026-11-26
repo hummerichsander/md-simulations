@@ -71,6 +71,9 @@ cu130 = [
     "md-simulations[openmm-cuda]",
     "mlcg[cu130]; python_full_version >= '3.12'",
 ]
+# `md-sim mcp`: the stdio MCP server over the config surface (md_simulations.mcp_server).
+# Imported only inside `serve()`, so nothing else needs it; the lab repo installs it.
+mcp = ["mcp>=2.0,<3"]
 viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
 # Trajectory analysis (TICA and related dimensionality reduction).
 analysis = ["deeptime>=0.4.4", "scipy>=1.11"]

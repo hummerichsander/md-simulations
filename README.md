@@ -217,6 +217,31 @@ site, or a site with no `partitions`, skips the site checks. Relative paths reso
 workspace root, the submit directory. `--json` prints `{"ok", "checks": [{"name", "ok", "status",
 "detail"}]}`, or the failure envelope above (exit 2) when the script or workspace cannot be read.
 
+### `md-sim mcp`: the same surface for an agent
+
+`md-sim mcp [--workspace P]` serves the config surface over MCP on stdio, so an agent in a
+workspace can use it without a shell. It needs the `mcp` extra (`pip install 'md-simulations[mcp]'`),
+which only the lab repo installs; without it `md-sim mcp` exits 1 and names the extra, and
+`import md_simulations` never imports `mcp`. The workspace is found once at startup (`--workspace`,
+else `$MD_WORKSPACE`, else upward from the cwd; none is exit 2) and every result carries it as
+`"workspace"`.
+
+| Tool | Same as | Arguments |
+|---|---|---|
+| `list_configs` | `config ls` | none |
+| `describe_config` | `config describe` | `path`, optional `data_root` |
+| `validate_config` | `config validate` | `path` |
+| `config_schema` | `config schema` | optional `engine` |
+| `new_config` | `config new` | `source`, `output`, optional `overrides` (`KEY=VALUE` list), `force` |
+| `check_job` | `check-job` | `script`, optional `require_gpu` |
+
+A result is the envelope the `--json` command prints plus `"workspace"`; a failure is
+`{"ok": false, "error": {...}}` as a result, not a transport error. Relative config paths resolve
+against `config_dir`, a relative script against the workspace root. `new_config` writes only a
+`.yaml` file inside `config_dir` and never the workspace descriptor or `sites/`. The tool set is
+read-and-author only: nothing starts a simulation or calls `sbatch`, and run state stays with the
+beamtime server. `docs/lab-repo-mcp.json` is a draft `.mcp.json` for the `simulations` repo.
+
 ## Engines
 
 Pick one with `engine:` in the config. All of them share the same integrators, reporters

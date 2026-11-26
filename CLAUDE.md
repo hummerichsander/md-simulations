@@ -85,6 +85,14 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
 - `src/md_simulations/preflight.py` — `md-sim check-job`: `parse_script` reads `#SBATCH` and
   `md-sim run` out of a shell script, `check_job` checks them against the workspace, site and configs.
   Core-only imports. An undeterminable fact is `skipped`, never a pass.
+- `src/md_simulations/mcp_server.py` — `md-sim mcp`: six read-and-author tools (`list_configs`,
+  `describe_config`, `validate_config`, `config_schema`, `new_config`, `check_job`) that run the
+  matching `md-sim ... --json` command in-process (`run_cli`, stdout captured) and return its envelope
+  plus `"workspace"`, so the CLI stays the one surface. Core-only imports; the `mcp` SDK (the `mcp`
+  extra) is imported inside `build_server`, and its absence is `McpUnavailable` (exit 1). A new tool
+  is a `make_tools` entry plus a `TOOL_DESCRIPTIONS` line; never one that runs or submits a job.
+  `new_config` refuses any output outside `config_dir`. `docs/lab-repo-mcp.json` is the draft
+  `.mcp.json` for the lab repo.
 - `src/md_simulations/torch_potentials/` — differentiable torch potentials built from
   a config (`torch-potentials` extra). `bridge`/`potential`/`batch` need torch;
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the

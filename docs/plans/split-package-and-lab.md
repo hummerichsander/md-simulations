@@ -483,7 +483,7 @@ without running a simulation.
    (comments are lost — say so in `--help`), validate the result before writing, refuse to overwrite without
    `--force`.
 
-### C3. `md-sim mcp`: the same surface over MCP (sonnet + review) — code
+### C3. `md-sim mcp`: the same surface over MCP (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/mcp_server.py`, `src/md_simulations/cli/main.py` (an `mcp`
   subcommand), `pyproject.toml` (an `mcp` extra), new `tests/test_mcp_server.py`,

@@ -35,6 +35,13 @@ TOP_COMMANDS: dict[str, str] = {
     "check-job": "Check an sbatch script against the workspace, site profile and configs.",
 }
 
+# Deliberately not in TOP_COMMANDS: that table is the `md-sim --json` surface, which
+# tests/test_cli.py pins to exactly {run, check-job}.
+MCP_SUMMARY = (
+    "Serve config, schema, validate, scaffold and check-job tools over MCP on stdio "
+    "(needs the 'mcp' extra)."
+)
+
 GROUP_ORDER = ("config", "prep", "analysis", "sampling")
 
 
@@ -167,6 +174,26 @@ def _cmd_check_job(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the config surface over MCP on stdio until the client disconnects.
+
+    The server module is imported here, and the ``mcp`` SDK only inside it, so no other command
+    (and no torch consumer) needs the ``mcp`` extra. ``--json`` shapes a startup failure; stdout
+    is the protocol once the server runs.
+
+    :param args: Parsed CLI arguments.
+    :return: The exit code (1 if the ``mcp`` extra is missing, 2 if there is no usable workspace)."""
+    from md_simulations.mcp_server import McpUnavailable, serve
+
+    try:
+        serve(args.workspace)
+    except McpUnavailable as exc:
+        fail(exc, json_mode=args.json, prog="md-sim mcp")
+    except WorkspaceError as exc:
+        fail(exc, json_mode=args.json, code=EXIT_USAGE, prog="md-sim mcp")
+    return 0
+
+
 def _group_entries(group: str) -> list[dict]:
     """Describe a group's verbs, so a listing needs no per-group special case.
 
@@ -290,6 +317,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_check.add_argument("--json", action="store_true", help="Print the result as JSON.")
     p_check.set_defaults(func=_cmd_check_job)
+
+    p_mcp = sub.add_parser("mcp", help=MCP_SUMMARY, description=MCP_SUMMARY)
+    p_mcp.add_argument(
+        "--workspace",
+        default=None,
+        metavar="PATH",
+        help="The workspace directory or md-workspace.yaml to serve "
+        "(default: $MD_WORKSPACE, else found upward from the cwd).",
+    )
+    p_mcp.add_argument(
+        "--json", action="store_true", help="Print a startup failure as a JSON envelope."
+    )
+    p_mcp.set_defaults(func=_cmd_mcp)
     return parser
 
 
