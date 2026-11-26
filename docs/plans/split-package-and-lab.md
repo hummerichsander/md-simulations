@@ -681,7 +681,7 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    other side), that `md-simulations` is the package other projects import, and that `simulations` holds the
    configs, job scripts and the beamtime store.
 
-### S3. The split script, for the user to run (sonnet + review) — code
+### S3. The split script, for the user to run (sonnet + review) — code — **done**
 
 - **Touches:** new `scripts/split-lab-repo.sh`, new `docs/split-runbook.md`.
 - **Read:** `../claude-instructions/{workspace,data,git}.md`; this plan's Decisions 2 and 3 and Finding 7;

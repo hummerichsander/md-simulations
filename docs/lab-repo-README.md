@@ -13,8 +13,8 @@ package; this repo holds only what is particular to this lab and this cluster.
 uv sync                                   # md-simulations[simulate,...] plus the notebook tooling
 md-sim config ls                          # the configs in this workspace
 md-sim run configs/cln-amber14-implicit-330K.yaml     # locally
-md-sim check-job slurm/cln-amber14-implicit-330K.sh   # verify a script ...
-sbatch slurm/cln-amber14-implicit-330K.sh             # ... then submit it
+md-sim check-job slurm/ala2-amber14-implicit-330K.sh  # verify a script ...
+sbatch slurm/ala2-amber14-implicit-330K.sh            # ... then submit it
 ```
 
 ## Layout

@@ -10,11 +10,13 @@ name = "simulations"
 version = "0.1.0"
 description = "Configs, job scripts and the Beamtime log for the lab's md-simulations campaigns."
 readme = "README.md"
-# cgschnet-potentials pulls mlcg, which needs 3.12 (marker-gated, so on 3.10/3.11 the extra
-# would silently resolve to plain torch-potentials). The lab runs the CGSchNet campaigns.
+# cgschnet-dataset (which includes cgschnet-potentials) pulls mlcg, which needs 3.12 (marker-gated,
+# so on 3.10/3.11 the extra would silently resolve to plain torch-potentials) and h5py. The lab runs
+# the CGSchNet campaigns, and its job scripts call md-sim-cgschnet-dataset and -priors. `prep`
+# (mdtraj, networkx) is what the vendored prep/olives.py imports at module scope.
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "md-simulations[simulate,analysis,viz,mcp,awsem,martini,cgschnet-potentials]",
+    "md-simulations[simulate,analysis,viz,mcp,awsem,martini,prep,cgschnet-dataset]",
     "ipykernel>=7.3.0",
     "jupyterlab>=4.0",
 ]
