@@ -66,6 +66,9 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `sites/<site>.yaml` (`Site`): where configs, data and the run store live and which cluster this is.
   Nothing else in `src/` may name a partition, a venv path or a data directory. Exported from
   `md_simulations.workspace`, not from `config`.
+- `src/md_simulations/preflight.py` — `md-sim check-job`: `parse_script` reads `#SBATCH` and
+  `md-sim run` out of a shell script, `check_job` checks them against the workspace, site and configs.
+  Core-only imports. An undeterminable fact is `skipped`, never a pass.
 - `src/md_simulations/torch_potentials/` — differentiable torch potentials built from
   a config (`torch-potentials` extra). `bridge`/`potential`/`batch` need torch;
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the

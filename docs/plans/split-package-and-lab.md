@@ -335,7 +335,7 @@ the queue, not about alanine dipeptide. Both go; W3 puts a checker in their plac
 6. README: delete the `gen-slurm` usage; add two sentences saying job scripts are written by hand (or by an
    agent) in the `simulations` repo against its template examples and checked with `md-sim check-job`.
 
-### W3. `md-sim check-job`: preflight an sbatch script (sonnet + review) — code
+### W3. `md-sim check-job`: preflight an sbatch script (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/preflight.py`, `src/md_simulations/cli.py` (new `check-job` parser),
   new `tests/test_preflight.py`.
@@ -345,8 +345,10 @@ the queue, not about alanine dipeptide. Both go; W3 puts a checker in their plac
   working tree: `.venv/bin/python -m md_simulations.cli check-job slurm/ala2-amber14-implicit-330K.sh` and
   `... slurm/alaX-amber14-implicit-remd-330K.sh`.
 - **Done:** a correct script reports every check `OK` and exits 0; a script whose `--partition` is not in the
-  site's `partitions` exits 1 naming the partition and the allowed set; a script whose config declares
-  `platform: CUDA` with no `--gres=gpu:1` exits 1; a script whose `md-sim run` config path does not exist
+  site's `partitions` exits 1 naming the partition and the allowed set; with `--require-gpu`, a script that
+  requests no GPU (`--gres=gpu:N` or `--gpus=N`) exits 1, and without the flag the `gres` check is `ok` when a
+  GPU is requested and `skipped` otherwise (amended: no config model has a `platform` field, so the need for
+  a GPU cannot be read from a config and the author or agent states it); a script whose `md-sim run` config path does not exist
   exits 1; `--json` prints `{"ok": bool, "checks": [{"name", "ok", "detail"}]}`; the REMD orchestration script
   (191 lines, no literal `md-sim run`) is handled, not crashed on.
 - **Risks:** a script that builds the config path in a shell variable or a loop → the config check reports
@@ -366,8 +368,8 @@ A wrong partition queues forever, a wrong data root silently writes a 10 ns traj
 2. `check_job(path, workspace, *, data_root=None) -> list[Check]` with `Check(name, status: "ok"|"fail"|
    "skipped"|"warn", detail)`. Checks, in order: `config` (each path exists and `load_config` succeeds),
    `inputs` (each config's `input_pdb`/`input_gro`/`top`/`model_file` resolves under the data root and exists),
-   `partition` (in `site.partitions` when non-empty), `gres` (if any config sets `platform: CUDA`, `--gres`
-   must match `gpu:*`), `output` (the `--output`/`--error` directory is creatable), `venv`
+   `partition` (in `site.partitions` when non-empty), `gres` (`--gres`/`--gpus` must request a GPU when
+   `--require-gpu` is passed; amended, see Done), `output` (the `--output`/`--error` directory is creatable), `venv`
    (`site.venv_activate` exists, when set).
 3. `md-sim check-job <script.sh> [--data-root P] [--json]`: exit 0 when no check failed, 1 otherwise. Human
    output is one aligned line per check, as in the Done line.

@@ -179,6 +179,19 @@ For a cluster job, write the batch script by hand (or have an agent write it) in
 `md-sim check-job` before submitting. The package no longer generates job scripts, and configs
 carry no `slurm:` block.
 
+`md-sim check-job <script.sh> [--data-root P] [--json]` reads the `#SBATCH` header and the
+`md-sim run <config>` commands of a script and checks them against the workspace, the site profile
+and the configs, one line per check: `directives` (a `#SBATCH` after the first command is ignored by
+slurm), `config` (the path exists and validates), `inputs` (`input_pdb`/`input_gro`/`top`/`model_file`
+exist under the data root), `partition` (in the site's `partitions`), `gres` (a GPU is requested; `--require-gpu` fails the check if none is),
+`output` (the `--output`/`--error` directory exists; slurm does not create it) and `venv` (the site's
+`venv_activate` exists). It exits 0 unless a check failed, 1 if one did and 2 if the script or the
+workspace cannot be read. A fact the script does not state statically (a config path in a shell
+variable, a data root exported from `$PWD`) is reported `skipped`, never passed; a workspace without a
+site, or a site with no `partitions`, skips the site checks. Relative paths resolve against the
+workspace root, the submit directory. `--json` prints `{"ok", "checks": [{"name", "ok", "status",
+"detail"}]}`.
+
 ## Engines
 
 Pick one with `engine:` in the config. All of them share the same integrators, reporters
