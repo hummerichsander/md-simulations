@@ -137,9 +137,16 @@ hint naming a deleted one-liner (`slurm/ala2-cgschnet-330K.sh` in `ala2-cgschnet
 
 ## Then
 
-1. Tell the planning session the clone exists; S4 (delete the lab half from the package) runs next. S4
-   removes `.mcp.json` from this checkout, which is untracked, so it uses `rm`, not `git rm`.
-2. Paste the former `docs/workspace-md-draft.md` into `claude-instructions/workspace.md` (you edit that
-   file); recover it with `git show <S4 commit>^:docs/workspace-md-draft.md`.
+1. Tell the planning session the clone exists; S4 (delete the lab half from the package) runs next. It
+   touches only tracked files: `.mcp.json` is untracked here, so it stays as a leftover below.
+2. Paste this bullet into the "Workspace" section of `claude-instructions/workspace.md`, replacing the
+   existing `md-simulations` bullet (you edit that file; a ticket session does not):
+
+   > - `md-simulations` is the package other projects import: the MD engines, the typed config models,
+   >   the `md-sim` command and the torch potentials other projects reweight with. It holds no configs,
+   >   job scripts or data. `simulations` holds those: the configs, the hand-written job scripts and the
+   >   Beamtime store, split out of `md-simulations` on 2026-11-26 (a full clone with its history, then
+   >   each half deleted its other side). It keeps the simulation data in its own git-ignored `data/`
+   >   (the shared root holds only derived datasets) and finds its layout through `md-workspace.yaml`.
 3. S4 deleted the `docs/lab-repo-*` and workspace drafts; the script had already installed what the lab
    repo needs from them.

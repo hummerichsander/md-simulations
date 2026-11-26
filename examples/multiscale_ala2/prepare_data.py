@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the notebook's reference frames: subsample a T-REMD run, then relax it unconstrained.
 
-The shipped trajectory came from ``configs/ala2-amber14-implicit-remd-330K-train.yaml`` --
-404 ns of temperature replica exchange whose 330 K rung is a proper canonical ensemble at
-330 K, but which crosses the alpha_L barrier far more often than plain MD does (alpha_L is
+The shipped trajectory came from the ``simulations`` repo's
+``configs/ala2-amber14-implicit-remd-330K-train.yaml`` -- 404 ns of temperature replica exchange
+whose 330 K rung is a proper canonical ensemble at 330 K, but which crosses the alpha_L barrier far more often than plain MD does (alpha_L is
 1.7 % of frames here against 0.0004 % in a 10 ns plain run, so a plain run cannot show that
 basin at all). The run reached 404 ns in three stages; ``--append`` below relaxes only the
 frames a later stage added, leaving the ones already on disk untouched.

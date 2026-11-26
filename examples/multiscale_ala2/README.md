@@ -39,8 +39,9 @@ announces itself:
 
 **They come from replica exchange, not plain MD.** At 330 K a 10 ns plain trajectory spends
 0.0004 % of its frames in the $\alpha_L$ basin — it is effectively missing. The frames here
-are the 330 K rung of `configs/ala2-amber14-implicit-remd-330K-train.yaml` (101 ns of T-REMD,
-same molecule and force field), which is a proper canonical ensemble at 330 K but crosses the
+are the 330 K rung of the `simulations` repo's
+`configs/ala2-amber14-implicit-remd-330K-train.yaml` (101 ns of T-REMD, same molecule and force
+field), which is a proper canonical ensemble at 330 K but crosses the
 barrier often enough to populate it. The subsample keeps every 5th frame and is uniform in
 time, so the Boltzmann weights the notebook inverts are unbiased:
 
