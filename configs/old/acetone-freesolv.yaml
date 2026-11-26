@@ -15,10 +15,3 @@ report_interval: 100
 temperature: 298.15
 friction: 1.0
 timestep: 0.002
-
-slurm:
-  job_name: md-acetone-free-solv
-  partition: a30
-  gres: gpu:1
-  time: 0-40:00:00
-  mem: 20G

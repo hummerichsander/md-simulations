@@ -189,6 +189,15 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    Decision 9 — on the core import path that `workspace.py`, `md-sim config` and `check-job` must stay free
    of. `workspace.py` therefore keeps its own upward walk.
 
+17. **The orchestration scripts carry their own job names and walltimes** (settled in W2's review): four
+   submit-mode scripts (`slurm/ala2-amber14-implicit-endpoints.sh`,
+   `slurm/alaX-amber14-implicit-330K-replicas.sh`, `slurm/alaX-amber14-implicit-remd-330K.sh`,
+   `slurm/cln-fiber-amber14-implicit-330K.sh`) read `job_name`/`time` out of each config's `slurm:` block
+   with an `awk` helper and submitted with empty `--job-name=`/`--time=` once W2 deleted the block. The
+   values are now literals in the scripts, which is Decision 4 applied consistently — queue facts live in
+   the hand-written script, not in the description of a physical system. The scripts move to the lab repo in
+   S3 self-contained; nothing there reads a config for queue parameters.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**

@@ -35,10 +35,3 @@ friction: 1.0                          # Langevin friction coefficient (ps^-1)
 timestep: 0.002                        # integration timestep (ps)
 minimize_energy: false                 # NN potentials are run without minimisation
 log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
-
-slurm:
-  job_name: md-my-protein-cgschnet     # SBATCH --job-name
-  partition: a30                       # SBATCH --partition
-  gres: gpu:1                          # SBATCH --gres (GPU strongly recommended)
-  time: 0-24:00:00                     # SBATCH --time (D-HH:MM:SS)
-  mem: 20G                             # SBATCH --mem

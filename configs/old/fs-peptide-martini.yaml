@@ -15,10 +15,3 @@ report_interval: 1000
 temperature: 300
 timestep: 0.020
 friction: 1.0
-
-slurm:
-  job_name: md-fs-peptide-cg-gromacs
-  partition: gshort
-  gres: gpu:0
-  time: 0-40:00:00
-  mem: 60G

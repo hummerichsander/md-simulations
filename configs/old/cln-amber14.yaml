@@ -18,10 +18,3 @@ report_interval: 1000
 temperature: 340
 friction: 0.1
 timestep: 0.002
-
-slurm:
-  job_name: md-cln-amber14
-  partition: a30
-  gres: gpu:1
-  time: 0-40:00:00
-  mem: 20G

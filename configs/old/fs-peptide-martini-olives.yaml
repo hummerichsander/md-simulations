@@ -23,12 +23,3 @@ mdrun_extra:
 
 # nsteps is taken from the mdp; kept here for the log banner only.
 num_steps: 0
-
-slurm:
-  job_name: md-fsp-martini-olives
-  partition: a30
-  gres: gpu:1
-  time: 1-00:00:00
-  mem: 8G
-  modules:
-    - gromacs

@@ -13,7 +13,7 @@
 # 10 ns at 2 fs, every frame saved, from configs/ala<n>-amber14-implicit-330K-r<k>.yaml. Together
 # with the original r0 runs they are the reference set of the split-flows Boltzmann-generator
 # benchmark (r0-r2 train, r3 is the holdout). Each replica is its own job with the walltime of its
-# config's `slurm:` block (r0 needed 4.7-5.5 h); each writes its own output_subdir and Beamtime run
+# length's walltime (see `replica_time` below); each writes its own output_subdir and Beamtime run
 # (group alaX/ala<n>_AMBER14_implicit_330K, run r<k>), so a failure costs only that replica.
 #
 # Two modes in one file, as in resample-h-bonds-alaX.sh:
@@ -59,8 +59,14 @@ if [[ -z ${CONFIG:-} ]]; then
     DRY_RUN=0
     [[ ${1:-} == --dry-run ]] && DRY_RUN=1
 
-    # A value of a top-level `slurm:` key in a config (the keys are indented two spaces).
-    slurm_key() { awk -v key="$2:" '$1 == key { print $2 }' "$1"; }
+    # Walltime per chain length -- a queue fact, kept here rather than in the configs. r0 needed
+    # 4.7-5.5 h; lengths not listed fall back to the longest of these.
+    replica_time() {
+        case "$1" in
+            2|3|5) echo "0-10:00:00" ;;
+            *)     echo "0-12:00:00" ;;
+        esac
+    }
 
     lane_last=()   # per lane, the id of the job submitted last
     count=0
@@ -69,8 +75,8 @@ if [[ -z ${CONFIG:-} ]]; then
         for k in $REPLICAS; do
             config="configs/ala${n}-amber14-implicit-330K-r${k}.yaml"
             [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
-            job="$(slurm_key "$config" job_name)"
-            time="$(slurm_key "$config" time)"
+            job="ala${n}-amber14-implicit-330K-r${k}"
+            time="$(replica_time "$n")"
             lane=$(( count % MAX_PARALLEL ))
             count=$(( count + 1 ))
             cmd=(sbatch --parsable "--job-name=${job}" "--time=${time}" "--export=ALL,CONFIG=${config}")

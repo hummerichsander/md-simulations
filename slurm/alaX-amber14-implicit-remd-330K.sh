@@ -71,8 +71,20 @@ if [[ -z ${CONFIG:-} ]]; then
     DRY_RUN=0
     [[ ${1:-} == --dry-run ]] && DRY_RUN=1
 
-    # A value of a top-level `slurm:` key in a config (the keys are indented two spaces).
-    slurm_key() { awk -v key="$2:" '$1 == key { print $2 }' "$1"; }
+    # Walltime per chain length and run -- a queue fact, kept here rather than in the configs. The
+    # pilots are 2 ns and all take the same slot; production grows with the ladder.
+    remd_time() {
+        if [[ $2 == pilot ]]; then
+            echo "0-12:00:00"
+            return
+        fi
+        case "$1" in
+            2) echo "0-12:00:00" ;;
+            3) echo "0-15:00:00" ;;
+            5) echo "0-20:00:00" ;;
+            *) echo "0-24:00:00" ;;
+        esac
+    }
 
     lane_last=()   # per lane, the id of the job submitted last
     count=0
@@ -82,8 +94,8 @@ if [[ -z ${CONFIG:-} ]]; then
         for run in $RUNS; do
             config="configs/ala${n}-amber14-implicit-remd-330K-${run}.yaml"
             [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
-            job="$(slurm_key "$config" job_name)"
-            time="$(slurm_key "$config" time)"
+            job="ala${n}-amber14-implicit-remd-330K-${run}"
+            time="$(remd_time "$n" "$run")"
             lane=$(( count % MAX_PARALLEL ))
             count=$(( count + 1 ))
             cmd=(sbatch --parsable "--job-name=${job}" "--time=${time}" "--export=ALL,CONFIG=${config},RESUME=${RESUME}")

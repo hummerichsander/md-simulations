@@ -59,16 +59,16 @@ if [[ -z ${CONFIG:-} ]]; then
     DRY_RUN=0
     [[ ${1:-} == --dry-run ]] && DRY_RUN=1
 
-    # A value of a top-level key of a config, or of a `slurm:` key (those are indented two spaces).
-    config_key() { awk -v key="$2:" '$1 == key { print $2 }' "$1"; }
+    # Queue facts, kept here rather than in the configs: every representative gets the same slot.
+    JOB_TIME="1-00:00:00"
 
     lane_last=()   # per lane, the id of the job submitted last
     count=0
     for k in $REPS; do
         config="configs/cln-fiber-amber14-implicit-330K-rep${k}.yaml"
         [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
-        job="$(config_key "$config" job_name)"
-        time="$(config_key "$config" time)"
+        job="cln-fiber-330K-rep${k}"
+        time="$JOB_TIME"
 
         lane=$(( count % MAX_PARALLEL ))
         count=$(( count + 1 ))

@@ -52,16 +52,16 @@ if [[ -z ${CONFIG:-} ]]; then
     DRY_RUN=0
     [[ ${1:-} == --dry-run ]] && DRY_RUN=1
 
-    # A value of a top-level `slurm:` key in a config (the keys are indented two spaces).
-    slurm_key() { awk -v key="$2:" '$1 == key { print $2 }' "$1"; }
+    # Queue facts, kept here rather than in the configs: both endpoint runs are sized the same.
+    JOB_TIME="0-12:00:00"
 
     ids=()
     last=""
     for t in $TEMPS; do
         config="configs/ala2-amber14-implicit-endpoints-${t}K.yaml"
         [[ -f $config ]] || { echo "error: no such config: $config" >&2; exit 2; }
-        job="$(slurm_key "$config" job_name)"
-        time="$(slurm_key "$config" time)"
+        job="ala2-amber14-implicit-${t}K"
+        time="$JOB_TIME"
         cmd=(sbatch --parsable "--job-name=${job}" "--time=${time}" "--export=ALL,CONFIG=${config}")
         [[ $SEQUENTIAL == 1 && -n $last ]] && cmd+=("--dependency=afterany:${last}")
         cmd+=("$SELF")

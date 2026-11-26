@@ -23,10 +23,3 @@ timestep: 0.020                        # integration timestep (ps); MARTINI3 use
 integrator: langevin                   # langevin | langevin_middle
 minimize_energy: true                  # energy-minimise before production
 log_level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
-
-slurm:
-  job_name: md-my-cg                   # SBATCH --job-name
-  partition: gshort                    # SBATCH --partition
-  gres: gpu:1                          # SBATCH --gres (gpu:0 to run on CPU)
-  time: 0-40:00:00                     # SBATCH --time (D-HH:MM:SS)
-  mem: 20G                             # SBATCH --mem

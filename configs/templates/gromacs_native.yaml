@@ -19,12 +19,3 @@ mdrun_extra:                           # extra flags passed to `gmx mdrun`
   - "1"
 
 num_steps: 0                           # informational only (real nsteps come from the mdp)
-
-slurm:
-  job_name: md-my-system               # SBATCH --job-name
-  partition: a30                       # SBATCH --partition
-  gres: gpu:1                          # SBATCH --gres (gpu:0 for CPU-only)
-  time: 1-00:00:00                     # SBATCH --time (D-HH:MM:SS)
-  mem: 8G                              # SBATCH --mem
-  modules:                             # `module load` lines emitted into the job script
-    - gromacs
