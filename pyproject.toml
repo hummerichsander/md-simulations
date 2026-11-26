@@ -108,7 +108,7 @@ cgschnet-dataset = [
 # a `--torch-backend` override) -- same constraint the standalone `cu130` extra
 # carries. Drop `cu130` from the list to keep a different CUDA line.
 all = [
-    "md-simulations[awsem,martini,gromacs,cgschnet,cu130,viz,analysis,torch-potentials]",
+    "md-simulations[awsem,martini,gromacs,cgschnet,cu130,viz,analysis,torch-potentials,mcp]",
 ]
 
 [project.urls]

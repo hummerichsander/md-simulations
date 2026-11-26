@@ -219,6 +219,21 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    `md_simulations.core.forces` imports on a core install. Rejected: adding `md-simulations[simulate]`
    to `prep`, which puts openmm back under a dataset-preparation extra and contradicts Decision 9.
 
+20. **`md-sim mcp` is listed by `md-sim --json` like every other command** (settled in C3's review):
+   C3 kept it out of `TOP_COMMANDS` to leave `tests/test_cli.py`'s pinned set untouched, which made the
+   listing that `_surface()` documents as "every command, so an agent can enumerate the CLI without
+   reading source" untrue — the Goal's "an agent can obtain the surface without reading source" has to
+   include the server an agent would start. `md-sim --help` listed it all along, so the two front doors
+   disagreed. The pinned set in `tests/test_cli.py` is now `{run, check-job, mcp}`.
+
+21. **The MCP server fails at startup when it finds no workspace** (settled in C3's review, confirming
+   C3's behaviour): `md-sim mcp` exits 2 with the `WorkspaceNotFound` message, which names both
+   `$MD_WORKSPACE` and the directories searched, instead of serving with `"workspace": null` and failing
+   every tool individually. The deployed form (`docs/lab-repo-mcp.json`) pins `MD_WORKSPACE`, so "no
+   workspace" is a misconfiguration, and one startup error in the client's log is easier to act on than
+   six tools that each repeat it. Rejected: serving workspace-less, which would add a null state to every
+   tool result and let `config_schema` — the one tool needing no workspace — mask the misconfiguration.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
@@ -601,7 +616,8 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    existing comment about not pinning a torch index.
 4. New `openmm-potentials = ["md-simulations[torch-potentials]", "md-simulations[simulate]"]`, documented
    as what a consumer needs to call `build_potential_from_file` on an AMBER/AWSEM config.
-5. New `mcp = ["mcp>=1.0"]`, installed by the `simulations` repo and by no torch consumer (C3).
+5. `mcp = ["mcp>=2.0,<3"]` as C3 wrote it (the 2.x SDK's `MCPServer`; 1.x has no such class),
+   installed by the `simulations` repo and by no torch consumer (C3). `all` carries it too.
 6. `analysis` gains `mdtraj`, `matplotlib>=3.8` and `scienceplots>=2.2.0` (its modules import them
    eagerly); new `prep = ["mdtraj>=1.10.3", "networkx>=3.0"]`; `cgschnet-dataset` keeps `h5py`.
 7. `all` is rebuilt from the new names and keeps its `cu130` caveat comment.

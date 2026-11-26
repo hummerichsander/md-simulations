@@ -14,6 +14,7 @@ import contextlib
 import io
 import json
 import os
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any
@@ -100,17 +101,23 @@ def _failure(error_type: str, message: str) -> dict[str, Any]:
     return {"ok": False, "error": {"type": error_type, "message": message}}
 
 
+# ``redirect_stdout`` swaps the process-wide ``sys.stdout``, and the SDK runs a synchronous tool
+# in a worker thread, so two tool calls in flight at once would capture each other's output. One
+# command at a time; they are all a config parse long.
+_INVOKE_LOCK = threading.Lock()
+
+
 def _invoke(argv: list[str]) -> dict[str, Any]:
     """Run ``md-sim <argv>`` in this process and return the envelope it printed.
 
-    stdout is captured (on a stdio server it is the transport), and neither an exception nor a
-    usage error escapes: both become a failure envelope.
+    stdout is captured (on a stdio server it is the transport) under :data:`_INVOKE_LOCK`, and
+    neither an exception nor a usage error escapes: both become a failure envelope.
 
     :param argv: The arguments after ``md-sim``, ``--json`` included.
     :return: The parsed envelope."""
     out, err = io.StringIO(), io.StringIO()
     try:
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with _INVOKE_LOCK, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             run_cli(argv)
     except Exception as exc:  # a tool reports its failure, it does not break the session
         return _failure(type(exc).__name__, str(exc))

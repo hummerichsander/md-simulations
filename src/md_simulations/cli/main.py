@@ -33,13 +33,14 @@ ALL_GROUP_SUMMARIES = {"config": "Inspect and author simulation configs.", **GRO
 TOP_COMMANDS: dict[str, str] = {
     "run": "Run a simulation from a YAML config.",
     "check-job": "Check an sbatch script against the workspace, site profile and configs.",
+    "mcp": "Serve the config surface over MCP on stdio (needs the 'mcp' extra).",
 }
 
-# Deliberately not in TOP_COMMANDS: that table is the `md-sim --json` surface, which
-# tests/test_cli.py pins to exactly {run, check-job}.
-MCP_SUMMARY = (
-    "Serve config, schema, validate, scaffold and check-job tools over MCP on stdio "
-    "(needs the 'mcp' extra)."
+# The long form for ``md-sim mcp --help``; the table above is the one-line surface listing.
+MCP_DESCRIPTION = (
+    "Serve the config surface over MCP on stdio: list, describe, validate and scaffold configs, "
+    "fetch the config JSON Schema and check an sbatch script. Needs the 'mcp' extra. Nothing "
+    "here runs a simulation or submits a job."
 )
 
 GROUP_ORDER = ("config", "prep", "analysis", "sampling")
@@ -318,7 +319,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("--json", action="store_true", help="Print the result as JSON.")
     p_check.set_defaults(func=_cmd_check_job)
 
-    p_mcp = sub.add_parser("mcp", help=MCP_SUMMARY, description=MCP_SUMMARY)
+    p_mcp = sub.add_parser("mcp", help=TOP_COMMANDS["mcp"], description=MCP_DESCRIPTION)
     p_mcp.add_argument(
         "--workspace",
         default=None,

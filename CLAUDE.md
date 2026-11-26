@@ -87,7 +87,8 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   Core-only imports. An undeterminable fact is `skipped`, never a pass.
 - `src/md_simulations/mcp_server.py` — `md-sim mcp`: six read-and-author tools (`list_configs`,
   `describe_config`, `validate_config`, `config_schema`, `new_config`, `check_job`) that run the
-  matching `md-sim ... --json` command in-process (`run_cli`, stdout captured) and return its envelope
+  matching `md-sim ... --json` command in-process (`run_cli`, stdout captured under `_INVOKE_LOCK`,
+  since the SDK runs a sync tool in a worker thread) and return its envelope
   plus `"workspace"`, so the CLI stays the one surface. Core-only imports; the `mcp` SDK (the `mcp`
   extra) is imported inside `build_server`, and its absence is `McpUnavailable` (exit 1). A new tool
   is a `make_tools` entry plus a `TOOL_DESCRIPTIONS` line; never one that runs or submits a job.

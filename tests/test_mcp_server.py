@@ -242,6 +242,37 @@ def test_stdout_is_not_leaked(tools: dict, capsys) -> None:
     assert captured.out == "" and captured.err == ""
 
 
+def test_concurrent_tool_calls_do_not_mix_results(tools: dict, lab: Path) -> None:
+    """Tools called at once keep their own output: a client may have several calls in flight.
+
+    :param tools: Tool handlers.
+    :param lab: The workspace root.
+    :return: None."""
+    calls = [
+        (lambda: tools["validate_config"]("x.yaml"), True),
+        (lambda: tools["validate_config"]("missing.yaml"), False),
+        (lambda: tools["config_schema"](), True),
+        (lambda: tools["list_configs"](), True),
+    ] * 4
+    results: list[tuple[dict, bool]] = []
+    lock = threading.Lock()
+
+    def call(handler, expected: bool) -> None:
+        res = handler()
+        with lock:
+            results.append((res, expected))
+
+    threads = [threading.Thread(target=call, args=pair) for pair in calls]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=60)
+    assert len(results) == len(calls)
+    for res, expected in results:
+        assert res["ok"] is expected, res
+        assert res["workspace"] == str(lab)
+
+
 def test_workspace_is_pinned(lab: Path, tmp_path: Path, monkeypatch) -> None:
     """``resolve_workspace`` honours ``--workspace`` and pins the result for later calls.
 

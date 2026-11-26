@@ -167,8 +167,8 @@ index, so rerunning one shard reproduces exactly the frames it owned.
 
 ## The `md-sim` command
 
-`md-sim` is one entry point: `md-sim run`, `md-sim check-job`, and the groups `config`, `prep`,
-`analysis` and `sampling`. `md-sim <group>` lists a group's verbs and `md-sim --json` lists the whole
+`md-sim` is one entry point: `md-sim run`, `md-sim check-job`, `md-sim mcp`, and the groups
+`config`, `prep`, `analysis` and `sampling`. `md-sim <group>` lists a group's verbs and `md-sim --json` lists the whole
 surface, so nothing has to be known in advance. `md-sim <group> <verb> ...` runs the standalone
 script of the same name with its arguments untouched, so `md-sim prep cgschnet-priors --help` prints
 exactly what `md-sim-cgschnet-priors --help` does; those `md-sim-*` commands stay installed.
@@ -220,7 +220,7 @@ workspace root, the submit directory. `--json` prints `{"ok", "checks": [{"name"
 ### `md-sim mcp`: the same surface for an agent
 
 `md-sim mcp [--workspace P]` serves the config surface over MCP on stdio, so an agent in a
-workspace can use it without a shell. It needs the `mcp` extra (`pip install 'md-simulations[mcp]'`),
+workspace can use it without a shell. It is listed by `md-sim --json` like any other command. It needs the `mcp` extra (`pip install 'md-simulations[mcp]'`),
 which only the lab repo installs; without it `md-sim mcp` exits 1 and names the extra, and
 `import md_simulations` never imports `mcp`. The workspace is found once at startup (`--workspace`,
 else `$MD_WORKSPACE`, else upward from the cwd; none is exit 2) and every result carries it as

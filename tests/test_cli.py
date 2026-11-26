@@ -36,7 +36,7 @@ def test_help_lists_commands_and_groups(capsys) -> None:
     :return: None."""
     assert run_cli(["--help"]) == 0
     out = capsys.readouterr().out
-    for name in ("run", "config", "prep", "analysis", "sampling", "check-job"):
+    for name in ("run", "config", "prep", "analysis", "sampling", "check-job", "mcp"):
         assert f"\n    {name} " in out
 
 
@@ -48,7 +48,7 @@ def test_json_listing_enumerates_the_surface(capsys) -> None:
     assert run_cli(["--json"]) == 0
     surface = json.loads(capsys.readouterr().out)
     assert surface["ok"] is True
-    assert {c["name"] for c in surface["commands"]} == {"run", "check-job"}
+    assert {c["name"] for c in surface["commands"]} == {"run", "check-job", "mcp"}
     groups = {g["name"]: g for g in surface["groups"]}
     assert set(groups) == {"config", "prep", "analysis", "sampling"}
     assert len(groups["prep"]["verbs"]) == 8
