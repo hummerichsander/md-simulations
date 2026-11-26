@@ -36,10 +36,3 @@ report_interval: 5000
 temperature: 330
 friction: 1.0
 timestep: 0.002
-
-slurm:
-  job_name: trp-cage-amber14-implicit-seeded-330K-r02
-  partition: a30
-  gres: gpu:1
-  time: 0-40:00:00
-  mem: 20G

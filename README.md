@@ -174,15 +174,10 @@ cp configs/templates/amber.yaml configs/mysystem.yaml
 md-sim run configs/mysystem.yaml
 ```
 
-For a cluster job, generate the batch script from the config's `slurm:` block. Rerun this
-after changing that block, since the `.sh` is generated, not live:
-
-```bash
-md-sim gen-slurm configs/mysystem.yaml -o slurm/mysystem.sh
-```
-
-Generated jobs `cd` to `$SLURM_SUBMIT_DIR` and activate `.venv`, so submit from the project
-root.
+For a cluster job, write the batch script by hand (or have an agent write it) in the
+`simulations` repo, starting from one of its template examples, and verify it with
+`md-sim check-job` before submitting. The package no longer generates job scripts, and configs
+carry no `slurm:` block.
 
 ## Engines
 
@@ -445,7 +440,7 @@ definition.
 
 ```
 configs/              one YAML per system, plus templates/ and mdp/
-slurm/                generated batch scripts; output/ holds job logs
+slurm/                hand-written batch scripts; output/ holds job logs
 data/                 default data root (git-ignored)
 beamtime/             experiment log (git-ignored; see beamtime.yaml)
 examples/             runnable end-to-end examples

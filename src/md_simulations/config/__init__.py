@@ -12,7 +12,6 @@ from md_simulations.config.base import (
     PureLiquidConfig,
     ReplicaExchangeConfig,
     SimulationConfig,
-    SlurmConfig,
 )
 from md_simulations.config.load import load_config, resolve_data_root
 
@@ -28,7 +27,6 @@ __all__ = [
     "PureLiquidConfig",
     "ReplicaExchangeConfig",
     "SimulationConfig",
-    "SlurmConfig",
     "load_config",
     "resolve_data_root",
 ]

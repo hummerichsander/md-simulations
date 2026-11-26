@@ -44,10 +44,3 @@ replica_exchange:
   other_output_freq: 500      # 1 ps
   checkpoint_interval: 500000 # 1 ns
   # no seed: fresh integrator and exchange streams per run
-
-slurm:
-  job_name: ala3-amber14-implicit-remd-330K-holdout
-  partition: a30
-  gres: gpu:1
-  time: 0-15:00:00
-  mem: 20G

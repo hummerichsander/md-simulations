@@ -291,7 +291,7 @@ is also what the agent CLI reads to orient itself.
 6. Export `Workspace`, `Site`, `load_workspace`, `WorkspaceError`, `WorkspaceNotFound` from
    `md_simulations.workspace`, not from `config` — the config package stays about configs.
 
-### W2. Delete slurm generation and the `slurm:` config block (sonnet + review) — code
+### W2. Delete slurm generation and the `slurm:` config block (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/slurm/` (whole package removed: `__init__.py`, `render.py`),
   `tests/test_slurm.py` (removed), `src/md_simulations/cli.py` (`_cmd_gen_slurm` 45–56, `p_gen` 82–90,

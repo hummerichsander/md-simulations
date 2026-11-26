@@ -5,10 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from md_simulations.config import load_config, resolve_data_root
-from md_simulations.config.base import AmberConfig, SlurmConfig
+from md_simulations.config.base import AmberConfig
 from md_simulations.workspace import Workspace
 
-from conftest import SAMPLE_CONFIGS, SAMPLE_SLURM
+from conftest import SAMPLE_CONFIGS
 
 
 @pytest.mark.parametrize("engine", sorted(SAMPLE_CONFIGS))
@@ -25,20 +25,6 @@ def test_load_dispatches_on_engine(
     assert config.engine == engine
     assert config.system == "t"
     assert config.output_subdir == "t/run"
-
-
-def test_slurm_block_parses(
-    sample_configs: dict[str, dict], write_yaml: Callable[..., Path]
-) -> None:
-    """A YAML slurm block round-trips into a SlurmConfig.
-
-    :param sample_configs: Per-engine sample payloads fixture.
-    :param write_yaml: YAML-writing factory fixture.
-    :return: None."""
-    payload = sample_configs["amber"] | {"slurm": dict(SAMPLE_SLURM)}
-    config = load_config(write_yaml(payload))
-    assert isinstance(config.slurm, SlurmConfig)
-    assert config.slurm.job_name == "md-t"
 
 
 def test_data_root_precedence(tmp_path: Path, monkeypatch) -> None:

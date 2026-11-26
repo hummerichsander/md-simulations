@@ -18,10 +18,3 @@ report_interval: 1000
 temperature: 300
 friction: 1.0
 timestep: 0.002
-
-slurm:
-  job_name: trp-cage-cgschnet-300K
-  partition: a30
-  gres: gpu:1
-  time: 0-24:00:00
-  mem: 20G

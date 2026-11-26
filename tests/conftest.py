@@ -71,10 +71,6 @@ def beamtime_logdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return logdir
 
 
-# Resource block merged into a sample when a config needs a SLURM section.
-SAMPLE_SLURM = {"job_name": "md-t", "partition": "a30", "gres": "gpu:1"}
-
-
 @pytest.fixture
 def sample_configs() -> dict[str, dict]:
     """Return per-engine sample config payloads (deep-copied per test).

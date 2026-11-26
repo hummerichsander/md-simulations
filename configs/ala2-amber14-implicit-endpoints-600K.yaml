@@ -39,10 +39,3 @@ temperature: 600
 friction: 1.0
 timestep: 0.002
 integrator: langevin_middle
-
-slurm:
-  job_name: ala2-amber14-implicit-600K
-  partition: a30
-  gres: gpu:1
-  time: 0-12:00:00
-  mem: 20G

@@ -51,10 +51,3 @@ integrator: langevin_middle
 minimize_energy: false      # the frame is already equilibrated under this force field at 330 K;
                             # minimising would bias the starting rotamer
 write_forces: false         # a fiber baseline needs coordinates, not force-matching data
-
-slurm:
-  job_name: cln-fiber-330K-rep4
-  partition: a30
-  gres: gpu:1
-  time: 1-00:00:00
-  mem: 20G

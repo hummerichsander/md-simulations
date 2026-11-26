@@ -5,7 +5,6 @@ import sys
 from md_simulations.config import load_config, resolve_data_root
 from md_simulations.core import setup_logger
 from md_simulations.engines import build_engine
-from md_simulations.slurm import render_slurm
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -42,26 +41,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def _cmd_gen_slurm(args: argparse.Namespace) -> None:
-    """Render a SLURM batch script for a config to stdout (or a file).
-
-    :param args: Parsed CLI arguments.
-    :return: None."""
-    config = load_config(args.config)
-    script = render_slurm(config, args.config, data_root=args.data_root)
-    if args.output:
-        with open(args.output, "w") as f:
-            f.write(script)
-        print(f"Wrote SLURM script → {args.output}")
-    else:
-        print(script)
-
-
 def main() -> None:
     """Entry point for the ``md-sim`` command."""
     parser = argparse.ArgumentParser(
         prog="md-sim",
-        description="Run and schedule config-driven MD simulations.",
+        description="Run config-driven MD simulations.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -78,16 +62,6 @@ def main() -> None:
         help="Continue a replica-exchange run from its checkpoint (same platform as the original).",
     )
     p_run.set_defaults(func=_cmd_run)
-
-    p_gen = sub.add_parser("gen-slurm", help="Generate a SLURM batch script from a config.")
-    p_gen.add_argument("config", help="Path to the YAML simulation config.")
-    p_gen.add_argument("-o", "--output", default=None, help="Write to this file instead of stdout.")
-    p_gen.add_argument(
-        "--data-root",
-        default=None,
-        help="Optional --data-root to bake into the generated run command.",
-    )
-    p_gen.set_defaults(func=_cmd_gen_slurm)
 
     args = parser.parse_args()
     args.func(args)
