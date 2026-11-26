@@ -5,8 +5,6 @@ import pytest
 
 from md_simulations.prep.polyalanine import build_polyalanine, format_pdb
 
-PDB_DIR = Path(__file__).resolve().parents[1] / "data" / "pdbs"
-
 
 def _coords(text: str) -> np.ndarray:
     """Extract ATOM coordinates from PDB text.
@@ -31,14 +29,15 @@ def _labels(text: str) -> list[str]:
 
 
 @pytest.mark.parametrize("n", range(3, 13))
-def test_reproduces_reference_pdbs(n: int) -> None:
-    """The builder reproduces the checked-in ala3-ala12 structures.
+def test_reproduces_reference_pdbs(n: int, data_root: Path) -> None:
+    """The builder reproduces the reference ala3-ala12 structures.
 
     :param n: Number of alanine residues.
+    :param data_root: The simulation data root (skips without ``MD_DATA_ROOT``).
     :return: None."""
-    reference = PDB_DIR / f"ala{n}.pdb"
+    reference = data_root / "pdbs" / f"ala{n}.pdb"
     if not reference.exists():
-        pytest.skip(f"{reference} not present (data root is git-ignored)")
+        pytest.skip(f"{reference} not present")
 
     ref_text = reference.read_text()
     new_text = format_pdb(build_polyalanine(n), n)

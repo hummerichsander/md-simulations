@@ -109,13 +109,10 @@ def cg_mapping_file(tmp_path: Path) -> Path:
 def data_root() -> Path:
     """The simulation data root for tests that read real data, or skip without one.
 
-    ``MD_DATA_ROOT`` wins; otherwise the repo's own ``data/`` if it exists. The package
-    suite must pass on a machine with neither, so the tests that need it skip.
+    ``MD_DATA_ROOT`` is the only source: the package holds no data of its own and must
+    never default a root, so the tests that need one skip without it.
 
     :return: The data-root directory."""
     if env := os.environ.get("MD_DATA_ROOT"):
         return Path(env).expanduser()
-    local = Path(__file__).resolve().parents[1] / "data"
-    if local.is_dir():
-        return local
     pytest.skip("needs MD_DATA_ROOT")

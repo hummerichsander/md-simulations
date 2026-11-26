@@ -29,6 +29,13 @@ __pycache__/
 core.[0-9]*
 =*
 
+# Stray run output. Nothing in this repo is a workspace any more -- the configs, the
+# data and the run store live in the sibling `simulations` repo -- but an `md-sim run`
+# started here still falls back to the git root for beamtime's store, and
+# `md-sim-umbrella` defaults its --output-dir to `output`.
+beamtime/
+output/
+
 # Environment
 .env
 
