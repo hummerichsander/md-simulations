@@ -242,7 +242,7 @@ Measurements stay, because they are evidence for the defaults around them.
 
 ## W. Workspace, site and the slurm turnaround
 
-### W1. The workspace descriptor and site profile (sonnet + review) — code
+### W1. The workspace descriptor and site profile (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/workspace.py`, `src/md_simulations/config/load.py`
   (`resolve_data_root` 23–41), `src/md_simulations/config/__init__.py` (exports 1–30), new

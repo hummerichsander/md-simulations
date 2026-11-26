@@ -24,6 +24,13 @@ Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of
 Data lives outside the repo. `MD_DATA_ROOT` (or `--data-root`) sets the root and defaults
 to `./data`; configs and generated job scripts are tracked, trajectories are not.
 
+A lab repo can state its layout once in an `md-workspace.yaml` (`config_dir`, `data_root`, `run_store`,
+`site`), found by walking up from the cwd to the git root or named by `$MD_WORKSPACE`; relative paths
+resolve against the descriptor's directory and `${VAR}` / `${VAR:-default}` expand from the environment
+(`data_root: ${MD_DATA_ROOT:-./data}`). Cluster facts (partitions, venv activation, modules) live in
+`sites/<site>.yaml` beside it, never in the package. The data root resolves CLI > `MD_DATA_ROOT` >
+workspace > config; see `md_simulations.workspace`.
+
 ## Experiment log
 
 Every `md-sim run` is also logged with [Beamtime](https://hummerichsander.github.io/beamtime/)

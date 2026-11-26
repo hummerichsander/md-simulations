@@ -62,6 +62,10 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
 - `src/md_simulations/engines/` — one module per force field / engine, each an `Engine`
   subclass building `(topology, system, positions)`.
 - `src/md_simulations/config/` — typed pydantic config models loaded from YAML.
+- `src/md_simulations/workspace.py` — `md-workspace.yaml` (`Workspace`) and its site profile
+  `sites/<site>.yaml` (`Site`): where configs, data and the run store live and which cluster this is.
+  Nothing else in `src/` may name a partition, a venv path or a data directory. Exported from
+  `md_simulations.workspace`, not from `config`.
 - `src/md_simulations/torch_potentials/` — differentiable torch potentials built from
   a config (`torch-potentials` extra). `bridge`/`potential`/`batch` need torch;
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the

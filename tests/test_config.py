@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from md_simulations.config import load_config, resolve_data_root
 from md_simulations.config.base import AmberConfig, SlurmConfig
+from md_simulations.workspace import Workspace
 
 from conftest import SAMPLE_CONFIGS, SAMPLE_SLURM
 
@@ -50,6 +51,35 @@ def test_data_root_precedence(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MD_DATA_ROOT", str(tmp_path / "env"))
     assert resolve_data_root(config, str(tmp_path / "cli")) == tmp_path / "cli"
     assert resolve_data_root(config, None) == tmp_path / "env"
+
+
+def test_data_root_workspace_between_env_and_config(tmp_path: Path, monkeypatch) -> None:
+    """The workspace data root sits below MD_DATA_ROOT and above the config value.
+
+    :param tmp_path: Pytest temporary directory.
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :return: None."""
+    config = AmberConfig(
+        system="t", output_subdir="t/run", input_pdb="a.pdb", data_root=str(tmp_path / "cfg")
+    )
+    workspace = Workspace(root=tmp_path, data_root="data")
+    monkeypatch.delenv("MD_DATA_ROOT", raising=False)
+    assert resolve_data_root(config, None, workspace) == tmp_path / "data"
+    assert resolve_data_root(config, None) == tmp_path / "cfg"
+    monkeypatch.setenv("MD_DATA_ROOT", str(tmp_path / "env"))
+    assert resolve_data_root(config, None, workspace) == tmp_path / "env"
+    assert resolve_data_root(config, str(tmp_path / "cli"), workspace) == tmp_path / "cli"
+
+
+def test_data_root_error_names_workspace(monkeypatch) -> None:
+    """With no source at all the error mentions md-workspace.yaml.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :return: None."""
+    monkeypatch.delenv("MD_DATA_ROOT", raising=False)
+    config = AmberConfig(system="t", output_subdir="t/run", input_pdb="a.pdb")
+    with pytest.raises(ValueError, match="md-workspace.yaml"):
+        resolve_data_root(config)
 
 
 def test_output_dir_resolution(tmp_path: Path) -> None:
