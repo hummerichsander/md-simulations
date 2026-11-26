@@ -49,3 +49,22 @@ examples/*/data/*.trr
 # equilibrate-h-bonds-alaX.sh expanding alaX-amber14-implicit-unconstrained-330K.yaml). They must
 # outlive the dispatcher because the array job reads the path later, but they are reproducible.
 configs/generated/
+
+# Editor directories, and the empty placeholders the sandbox bind-mounts over the
+# shell dotfiles it hides from $HOME. Neither is part of the project; the mounts
+# reappear each session and cannot be removed from inside it.
+.idea
+.vscode
+.bash_profile
+.bashrc
+.profile
+.zprofile
+.zshrc
+.gitconfig
+.ripgreprc
+# Also a placeholder mount, not a real submodule file. If this repo ever gains a
+# genuine submodule, `git add -f .gitmodules` it and drop this line.
+.gitmodules
+
+.claude
+.mcp.json
