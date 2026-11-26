@@ -6,7 +6,7 @@ produced by mlcg's ``LangevinSimulation`` driving a *specialized* model through
 pruned* model. Two independent code paths, so agreement is real evidence rather than a
 tautology -- and any drift in mlcg's internals fails here loudly.
 
-Skipped unless both mlcg and the (git-ignored) data root are present."""
+Skipped unless both mlcg and a data root (``MD_DATA_ROOT``) are present."""
 
 from pathlib import Path
 
@@ -22,11 +22,10 @@ from md_simulations.torch_potentials import build_potential_from_file  # noqa: E
 from md_simulations.torch_potentials.bridge import KCALMOL_TO_KJMOL, NM_TO_ANG  # noqa: E402
 from md_simulations.torch_potentials.cgschnet import bead_permutation  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[2]
-DATA_ROOT = REPO / "data"
-CONFIG = REPO / "configs" / "trpcage-cgschnet-300K.yaml"
-RAW = DATA_ROOT / "trp-cage" / "CGSchNet_300K_2" / "_mlcg_raw"
-BEAD_PDB = DATA_ROOT / "pdbs" / "2JOF_5B-CG.pdb"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+CONFIG = FIXTURES / "trpcage-cgschnet.yaml"
+BEAD_PDB = FIXTURES / "2JOF_5B-CG.pdb"
+RAW_SUBDIR = Path("trp-cage") / "CGSchNet_300K_2" / "_mlcg_raw"
 
 N_FRAMES = 8
 # kcal/mol/A -> kJ/mol/nm. Never hand-written in production code: there the nm->A and
@@ -42,13 +41,16 @@ ENERGY_RTOL = 1e-4
 FORCE_RTOL = 1e-3
 
 
-def _require_data() -> None:
-    """Skip the test when the git-ignored reference data is not checked out.
+def _require_data(data_root: Path) -> Path:
+    """Skip the test when the reference data is not under the data root.
 
-    :return: None."""
-    for path in (RAW, BEAD_PDB, CONFIG):
+    :param data_root: The data root (``MD_DATA_ROOT`` or the local ``data/``).
+    :return: The directory holding mlcg's raw simulation output."""
+    raw = data_root / RAW_SUBDIR
+    for path in (raw, BEAD_PDB, CONFIG):
         if not path.exists():
-            pytest.skip(f"{path} not present (the data root is git-ignored)")
+            pytest.skip(f"{path} not present (the data root is not part of the repo)")
+    return raw
 
 
 def _reorder_within_residues(topology: "md.Topology", order: tuple[str, ...]) -> "md.Topology":
@@ -73,56 +75,60 @@ def _reorder_within_residues(topology: "md.Topology", order: tuple[str, ...]) ->
 
 
 @pytest.fixture(scope="module")
-def reference() -> dict:
+def reference(data_root: Path) -> dict:
     """mlcg's own coordinates, energies and forces for the first frames.
 
+    :param data_root: The data root.
     :return: A dict of ``coords`` (nm, model bead order), ``energy`` (kJ/mol) and
         ``forces`` (kJ/mol/nm, model bead order)."""
-    _require_data()
+    raw = _require_data(data_root)
     return {
-        "coords": np.load(RAW / "sim_coords_0000.npy")[0, :N_FRAMES] / NM_TO_ANG,
-        "energy": np.load(RAW / "sim_potential_0000.npy")[0, :N_FRAMES] * KCALMOL_TO_KJMOL,
-        "forces": np.load(RAW / "sim_forces_0000.npy")[0, :N_FRAMES]
+        "coords": np.load(raw / "sim_coords_0000.npy")[0, :N_FRAMES] / NM_TO_ANG,
+        "energy": np.load(raw / "sim_potential_0000.npy")[0, :N_FRAMES] * KCALMOL_TO_KJMOL,
+        "forces": np.load(raw / "sim_forces_0000.npy")[0, :N_FRAMES]
         * FORCE_KCAL_ANG_TO_KJMOL_NM,
     }
 
 
 @pytest.fixture(scope="module")
-def model_potential():
+def model_potential(data_root: Path):
     """A potential bound to the model's own bead order (identity permutation).
 
+    :param data_root: The data root.
     :return: A ``CGSchNetPotential``."""
-    _require_data()
+    _require_data(data_root)
     topology = md.load_topology(str(BEAD_PDB))
-    return build_potential_from_file(topology, CONFIG, data_root=DATA_ROOT)
+    return build_potential_from_file(topology, CONFIG, data_root=data_root)
 
 
 @pytest.fixture(scope="module")
-def float64_potential():
+def float64_potential(data_root: Path):
     """A separate float64 potential for the finite-difference check.
 
     Built independently rather than copied: ``to()`` casts modules in place and the
     module-scoped fixtures share their model dict, so converting a copy would silently
     leave every later test running against a float64 model.
 
+    :param data_root: The data root.
     :return: A ``CGSchNetPotential`` in double precision."""
-    _require_data()
+    _require_data(data_root)
     topology = md.load_topology(str(BEAD_PDB))
     return build_potential_from_file(
-        topology, CONFIG, data_root=DATA_ROOT
+        topology, CONFIG, data_root=data_root
     ).to(dtype=torch.float64)
 
 
 @pytest.fixture(scope="module")
-def projected_potential():
+def projected_potential(data_root: Path):
     """A potential bound to a reordered (``N, CA, C, O, CB``) caller topology.
 
+    :param data_root: The data root.
     :return: A ``CGSchNetPotential`` whose permutation is not the identity."""
-    _require_data()
+    _require_data(data_root)
     topology = _reorder_within_residues(
         md.load_topology(str(BEAD_PDB)), ("N", "CA", "C", "O", "CB")
     )
-    return build_potential_from_file(topology, CONFIG, data_root=DATA_ROOT)
+    return build_potential_from_file(topology, CONFIG, data_root=data_root)
 
 
 def test_energies_match_mlcg(model_potential, reference: dict) -> None:
@@ -291,11 +297,12 @@ def test_chunking_matches_a_single_batch(model_potential, reference: dict) -> No
     np.testing.assert_allclose(chunked.numpy(), whole.numpy(), rtol=1e-5, atol=1e-3)
 
 
-def test_bead_permutation_on_the_real_topologies() -> None:
+def test_bead_permutation_on_the_real_topologies(data_root: Path) -> None:
     """The real model PDB and its projected reordering differ by the known permutation.
 
+    :param data_root: The data root.
     :return: None."""
-    _require_data()
+    _require_data(data_root)
     model_top = md.load_topology(str(BEAD_PDB))
     caller_top = _reorder_within_residues(model_top, ("N", "CA", "C", "O", "CB"))
 

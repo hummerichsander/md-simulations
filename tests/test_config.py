@@ -97,3 +97,23 @@ def test_constraints_rejects_an_unknown_scheme(
     payload = sample_configs["amber"] | {"constraints": "hangles"}
     with pytest.raises(ValidationError):
         load_config(write_yaml(payload))
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def test_fixture_config_loads() -> None:
+    """The vendored trp-cage CGSchNet config parses with no data root and no mlcg.
+
+    Pins the fixture against drift from the ``simulations`` repo's config: the engine, the
+    replica count and the bead count of the vendored PDB are what the cgschnet regression
+    tests assume.
+
+    :return: None."""
+    config = load_config(FIXTURES / "trpcage-cgschnet.yaml")
+    assert config.engine == "cgschnet"
+    assert config.input_pdb == "pdbs/2JOF_5B-CG.pdb"
+    assert config.model_energy_unit == "kcal/mol"
+    assert config.n_replicas == 10
+    pdb = (FIXTURES / "2JOF_5B-CG.pdb").read_text().splitlines()
+    assert sum(line.startswith(("ATOM", "HETATM")) for line in pdb) == 97

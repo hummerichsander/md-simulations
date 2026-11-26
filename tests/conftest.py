@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -106,3 +107,19 @@ def cg_mapping_file(tmp_path: Path) -> Path:
     path = tmp_path / "mapping.json"
     path.write_text(json.dumps({"beads": [["ALA", "CA", 1], ["GLY", "CA", 8]]}))
     return path
+
+
+@pytest.fixture(scope="session")
+def data_root() -> Path:
+    """The simulation data root for tests that read real data, or skip without one.
+
+    ``MD_DATA_ROOT`` wins; otherwise the repo's own ``data/`` if it exists. The package
+    suite must pass on a machine with neither, so the tests that need it skip.
+
+    :return: The data-root directory."""
+    if env := os.environ.get("MD_DATA_ROOT"):
+        return Path(env).expanduser()
+    local = Path(__file__).resolve().parents[1] / "data"
+    if local.is_dir():
+        return local
+    pytest.skip("needs MD_DATA_ROOT")

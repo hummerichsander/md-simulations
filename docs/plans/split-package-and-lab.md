@@ -185,7 +185,7 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
 
 ## S. Split and fixtures
 
-### S1. Free the package suite from `configs/` and `data/` (sonnet) — code
+### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
 
 - **Touches:** `tests/torch_potentials/test_cgschnet_regression.py` (`REPO`/`DATA_ROOT`/`CONFIG` 25–30),
   `tests/torch_potentials/test_cgschnet_mlcg.py` (`REPO`/`DATA_ROOT`/`CONFIG` 26–31), new
