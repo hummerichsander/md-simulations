@@ -310,7 +310,7 @@ fi
 # The package ignores all of .claude. In the lab repo the skill is committed, so ignore only what
 # is local to a checkout: everything under .claude/ except skills/ (settings.local.json, the
 # harness's .cc-writes droppings, ...).
-run sed -i 's|^\.claude$|.claude/*\n!.claude/skills/|' "$DEST/.gitignore"
+run sed -i 's|^\.claude$|# Claude Code state, local to each checkout -- except the committed skills. A new\n# tracked path under .claude/ (settings.json, commands/, ...) needs its own "!" line.\n.claude/*\n!.claude/skills/|' "$DEST/.gitignore"
 if [ "$DRY_RUN" -eq 0 ] && ! grep -qx '!.claude/skills/' "$DEST/.gitignore"; then
     die "the .gitignore edit for .claude did not take"
 fi
