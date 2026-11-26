@@ -1,14 +1,18 @@
 # md-simulations
 
 Run molecular dynamics from a YAML file. One config describes a system — force field,
-thermostat, how long — and the same command runs it locally or as a SLURM job, whether the
+thermostat, how long — and the same command runs it locally or inside a job script, whether the
 engine underneath is OpenMM, GROMACS, or a machine-learned coarse-grained model. The point
 is that switching engines doesn't mean rewriting your setup.
 
+This is the package. It holds the engines, the typed config models, the differentiable torch
+potentials and the `md-sim` command; it contains no configs for particular systems, no job
+scripts and no knowledge of any cluster. A research repo that runs campaigns with it keeps those
+itself (see [Workspaces](#workspaces)).
+
 ```bash
 uv sync
-md-sim run configs/cln-amber14-implicit-330K.yaml     # locally
-sbatch slurm/cln-amber14-implicit-330K.sh             # or on the cluster
+md-sim run my-system.yaml --data-root /path/to/data
 ```
 
 Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of engine:
@@ -21,54 +25,31 @@ Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of
 | `final_structure.pdb` | last frame, and the restart point for a follow-up run |
 | `simulation_summary.txt` | force field, ensemble, thermostat, timestep, simulated time |
 
-Data lives outside the repo. `MD_DATA_ROOT` (or `--data-root`) sets the root and defaults
-to `./data`; configs and generated job scripts are tracked, trajectories are not.
+Data lives outside the package and outside any repo that uses it. The data root is set by
+`--data-root`, `MD_DATA_ROOT`, the workspace descriptor or the config's `data_root`, in that order
+of precedence; nothing defaults it, and a run with none of them exits with an error naming all four.
+Trajectories are never committed.
 
-A lab repo can state its layout once in an `md-workspace.yaml` (`config_dir`, `data_root`, `run_store`,
-`site`), found by walking up from the cwd to the git root or named by `$MD_WORKSPACE`; relative paths
-resolve against the descriptor's directory and `${VAR}` / `${VAR:-default}` expand from the environment
-(`data_root: ${MD_DATA_ROOT:-./data}`). Cluster facts (partitions, venv activation, modules) live in
-`sites/<site>.yaml` beside it, never in the package. The data root resolves CLI > `MD_DATA_ROOT` >
-workspace > config; see `md_simulations.workspace`.
+Every `md-sim run` is also logged with [Beamtime](https://hummerichsander.github.io/beamtime/): the
+config, the output directory, energies, temperature and speed every `report_interval` steps, the
+console output and references to the output files. The optional `beamtime:` block of a config
+(`group`, `name`) sets where the run lands; `md-sim config schema` lists it. Where the store lives
+and how the groups are laid out is up to the repo running the campaign.
 
-## Experiment log
+## Workspaces
 
-Every `md-sim run` is also logged with [Beamtime](https://hummerichsander.github.io/beamtime/)
-into `beamtime/` at the project root (set in `beamtime.yaml`; the logs are not committed). A
-run records the config, the absolute output directory, energies, temperature and speed every
-`report_interval` steps (potential energy and RMS force per saved frame for `cgschnet`), the
-console output, and references to the output files, which stay on the data root. Logs are
-grouped as systems, simulations and replica sets:
-
-```
-beamtime/
-  cln/                              one group per system
-    AMBER14_implicit_stabilized_315K  a simulation is a run, named after its output folder
-    AMBER14_implicit_330K/          a replica set is a group of runs
-      r00  r01  ...
-```
-
-A config sets its place with an optional `beamtime:` block. `group` defaults to the system and
-`name` to the last part of `output_subdir`. Configs that each run one replica of a set name the
-set as their group:
-
-```yaml
-output_subdir: cln/AMBER14_implicit_330K_r01
-beamtime:
-  group: cln/AMBER14_implicit_330K
-  name: r01
-```
-
-A `cgschnet` config with `n_replicas > 1` makes this group by itself:
-`<group>/<name>/r00, r01, ...`, one run per batched replica. Those runs do not capture the
-console output, and a job killed by slurm leaves them `lost` rather than `killed`.
-`beamtime serve --open` shows the log in the browser.
+A repo that runs many systems can state its layout once in an `md-workspace.yaml` (`config_dir`,
+`data_root`, `run_store`, `site`), found by walking up from the cwd to the git root or named by
+`$MD_WORKSPACE`; relative paths resolve against the descriptor's directory and `${VAR}` /
+`${VAR:-default}` expand from the environment (`data_root: ${MD_DATA_ROOT:-./data}`). Cluster facts
+(partitions, venv activation, modules) live in `sites/<site>.yaml` beside it, never in the package.
+`md-sim config ls`, `md-sim check-job` and `md-sim mcp` read it; see `md_simulations.workspace`.
+Hand-written configs and job scripts belong in that repo, not here.
 
 ## Replica exchange
 
 Any OpenMM engine (`amber`, `pure_liquid`, `martini`, `gromacs_input`, `awsem`) can run
-temperature replica exchange by adding a `replica_exchange:` block — see the commented one in
-`configs/templates/amber.yaml`. One replica runs per temperature of a ladder (explicit, or
+temperature replica exchange by adding a `replica_exchange:` block — `md-sim config schema --engine amber` lists its fields. One replica runs per temperature of a ladder (explicit, or
 geometric from `temperature` to `t_max`), and every `exchange_interval` steps neighbouring
 temperatures attempt to swap. Swaps move the temperature, not the coordinates: the replicas'
 velocities are rescaled by `sqrt(T_new / T_old)`. The system must be NVT.
@@ -82,7 +63,7 @@ Beamtime gets one run per temperature below `<group>/<name>`, each logging its s
 with the next temperature up, and the global round-trip count.
 
 `checkpoint_interval` writes `checkpoint/`. A rerun that finds one stops rather than overwrite it;
-continue with `md-sim run configs/x.yaml --resume`. OpenMM checkpoints belong to the platform and
+continue with `md-sim run x.yaml --resume`. OpenMM checkpoints belong to the platform and
 OpenMM version that wrote them, so resume on the same kind of GPU node. The Beamtime runs are
 continued as a new attempt, not duplicated. Replicas currently run one after another in one
 process, so a job costs about `n_replicas` plain runs of GPU time.
@@ -120,10 +101,6 @@ convention: flexible dynamics and the resampler's independent-harmonic draw are 
 density (the chignolin fiber pilot measured a 3 % narrower X–H width under flexible dynamics).
 Put the reference in the unconstrained convention first — see the next section.
 
-`configs/cln-fiber-amber14-implicit-330K-rep*.yaml` + `slurm/cln-fiber-amber14-implicit-330K.sh`
-are a worked example: six chignolin runs, each freezing the 47-bead slow subspace of one
-conformational mode.
-
 ## Repairing constrained bonds
 
 A trajectory run with `constraints: hbonds` has every X–H bond pinned at exactly its equilibrium
@@ -148,14 +125,17 @@ actually scores. Use the resampler when speed matters or the ensemble is being p
 reference's convention; use the equilibration when the output is itself the reference.
 
 ```bash
-sbatch slurm/equilibrate-h-bonds.sh configs/x-unconstrained.yaml traj.trr top.pdb
-EQUIL_TIME=5.0 FRICTION=20.0 sbatch slurm/equilibrate-h-bonds.sh ...   # knobs; see the header
+md-sim sampling equilibrate-hbonds x-unconstrained.yaml --trajectory traj.trr --topology top.pdb \
+    --out out/ --time 5.0 --friction 20.0       # one shard; see --help for --start/--stop/--stride
 ```
+
+`--time` (ps of dynamics per frame) and `--friction` are the two knobs below. A whole trajectory is
+an array job over shards, which a job script in the repo running the campaign provides.
 
 The config must set `constraints: none` — it is both the only build carrying the bond terms and
 the only one OpenMM will freeze atoms in. Two numbers have to be measured rather than assumed, and
-they trade off: convergence is a **plateau in `EQUIL_TIME`**, not agreement with `sqrt(kT/k)`
-(that analytic width is the thing being corrected), and raising `FRICTION` reaches the plateau in
+they trade off: convergence is a **plateau in `--time`**, not agreement with `sqrt(kT/k)`
+(that analytic width is the thing being corrected), and raising `--friction` reaches the plateau in
 fewer steps while biasing nothing, since the stationary distribution of Langevin dynamics does not
 depend on the friction.
 
@@ -190,19 +170,11 @@ JSON object on stdout: `{"ok": true, ...}` on success and `{"ok": false, "error"
 `md-sim run <config> --json` the run's own logging goes to stderr and the object is
 `{"ok", "config", "data_root", "output_dir", "engine", "system", "steps"}`.
 
-## Starting a new system
+### `md-sim check-job`: verify a job script before submitting
 
-Copy the template for your engine — every field is commented — then edit and run:
-
-```bash
-cp configs/templates/amber.yaml configs/mysystem.yaml
-md-sim run configs/mysystem.yaml
-```
-
-For a cluster job, write the batch script by hand (or have an agent write it) in the
-`simulations` repo, starting from one of its template examples, and verify it with
-`md-sim check-job` before submitting. The package no longer generates job scripts, and configs
-carry no `slurm:` block.
+The package does not generate job scripts, and configs carry no `slurm:` block: write the script
+by hand (or have an agent write it) and check it here before it is submitted. A job script is a
+property of a cluster and a campaign, so it lives in the repo that runs one.
 
 `md-sim check-job <script.sh> [--data-root P] [--json]` reads the `#SBATCH` header and the
 `md-sim run <config>` commands of a script and checks them against the workspace, the site profile
@@ -245,7 +217,9 @@ beamtime server. `docs/lab-repo-mcp.json` is a draft `.mcp.json` for the `simula
 ## Engines
 
 Pick one with `engine:` in the config. All of them share the same integrators, reporters
-and output files, so the table is mostly about what inputs each needs.
+and output files, so the table is mostly about what inputs each needs. `md-sim config schema
+--engine <name>` prints the fields of one engine, and `md-sim config describe <cfg>` shows what a
+config resolves to.
 
 | engine | runs | inputs | needs |
 | --- | --- | --- | --- |
@@ -288,7 +262,7 @@ so re-export it once:
 ```bash
 md-sim-cgschnet-reexport data/models/cgschnet/transferable_model_and_prior.pt \
     -o data/models/cgschnet/transferable_model_and_prior.reexport.pt
-md-sim run configs/trpcage-cgschnet-300K.yaml
+md-sim run trpcage-cgschnet-300K.yaml
 ```
 
 The config wants three things: `model_file` (re-exported), `configurations_file`, and
@@ -315,7 +289,7 @@ Projecting coordinates is easy; projecting forces is where people lose an aftern
 uv sync --extra cgschnet-dataset --extra cu130 --torch-backend=cu130
 md-sim-cgschnet-dataset --run data/trp-cage/AMBER14_implicit_300K \
     --bead-pdb data/pdbs/2JOF_5B-CG.pdb --out data/trp-cage/fm_300K \
-    --cgschnet-config configs/trpcage-cgschnet-300K.yaml --name trpcage
+    --cgschnet-config trpcage-cgschnet-300K.yaml --name trpcage
 ```
 
 Out comes an `.h5` that mlcg's training script reads directly, plus the same arrays as
@@ -364,7 +338,7 @@ import torch
 from md_simulations.torch_potentials import build_potential_from_file
 
 traj = md.load("data/pdbs/1UAO-cleaned.pdb")
-pot = build_potential_from_file(traj.topology, "configs/cln-awsem-330K.yaml", data_root="data")
+pot = build_potential_from_file(traj.topology, "cln-awsem-330K.yaml", data_root="data")
 
 x = torch.tensor(traj.xyz[0], requires_grad=True)   # (N, 3) nm, or (F, N, 3)
 energy = pot(x)                                     # kJ/mol, or (F,)
@@ -388,7 +362,7 @@ To see one energy term at a time, use `build_potential_terms` /
 its own group before the `Context` is built, so the parts sum to `build_potential`'s total:
 
 ```python
-terms = build_potential_terms_from_file(top, "configs/trpcage-amber14-implicit-300K.yaml")
+terms = build_potential_terms_from_file(top, "trpcage-amber14-implicit-300K.yaml")
 {name: pot(x).item() for name, pot in terms.items()}
 # {'HarmonicBondForce': 407.0, 'NonbondedForce': -1164.0, 'CustomGBForce': -2553.9, ...}
 ```
@@ -422,7 +396,7 @@ pin takes `--extra cgschnet-potentials` alone.)
 
 ```python
 pot = build_potential_from_file(
-    cg_topology, "configs/trpcage-cgschnet-300K.yaml", data_root="data"
+    cg_topology, "trpcage-cgschnet-300K.yaml", data_root="data"
 )
 with torch.no_grad():
     energy = pot(R)                     # (B, 97, 3) nm -> (B,) kJ/mol
@@ -502,12 +476,10 @@ definition.
 ## Layout
 
 ```
-configs/              one YAML per system, plus templates/ and mdp/
-slurm/                hand-written batch scripts; output/ holds job logs
-data/                 default data root (git-ignored)
-beamtime/             experiment log (git-ignored; see beamtime.yaml)
-examples/             runnable end-to-end examples
 src/md_simulations/   the package
+tests/                the suite; needs no data root and no cluster
+examples/             runnable end-to-end examples
+docs/                 agent contract (agents.md), drafts for the lab repo, plans
 ```
 
 See `CLAUDE.md` for code conventions.

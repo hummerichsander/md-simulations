@@ -104,6 +104,14 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `PotentialLike` class in `cgschnet.py`, dispatched from `build_potential`, and still
   touches neither `Potential` nor `bridge`. It imports torch only — mlcg arrives via
   `torch.load` at build time, so the module stays importable without the extra.
-- `configs/*.yaml` — one versioned config per simulated system.
-- Simulation *data* lives outside the repo under a configurable data root
-  (`MD_DATA_ROOT` env var or `--data-root`); never commit trajectories.
+- This repo is the package only: `src/`, `tests/`, `examples/`, `docs/`. The per-system configs,
+  the orchestration slurm scripts, the Beamtime store, `md-workspace.yaml` and `sites/<site>.yaml`
+  live in the sibling `simulations` repo (`../simulations`), which installs this package and reaches
+  the shared data root through a gitignored `data/` symlink. Nothing here may default a data root
+  (precedence is `--data-root` > `MD_DATA_ROOT` > workspace > config) or name a partition, a venv
+  or a data directory. Never commit trajectories.
+- **CLI contract** (`docs/agents.md`): `md-sim` is one discoverable noun/verb command, every
+  command takes `--json` and answers with the `_output.py` envelope, and an agent authors against
+  `md-sim config schema`, verifies with `config validate` and `check-job`, never writes into the
+  data root and never submits a job. A new command keeps that contract and is added to the dispatch
+  table, so `md-sim --help` and `md-sim --json` list it.

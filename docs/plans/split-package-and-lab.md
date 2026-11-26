@@ -638,7 +638,7 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 
 ## D. Documentation and handover
 
-### D1. Split the docs along the new seam (sonnet) — code
+### D1. Split the docs along the new seam (sonnet) — code — **done**
 
 - **Touches:** `README.md` (448 lines: `## Experiment log` 27, `## Starting a new system` 161,
   `## Layout` 437), `CLAUDE.md` (77 lines), new `docs/agents.md`, new `docs/lab-repo-README.md` (a draft for
