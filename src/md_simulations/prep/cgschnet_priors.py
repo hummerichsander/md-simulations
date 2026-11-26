@@ -31,8 +31,8 @@ reproduces the terms and Fourier degrees of mlcg's transferable model
 
 Usage::
 
-    md-sim-cgschnet-priors --dataset data/alaX/ala2_fm_330K
-    md-sim-cgschnet-priors --dataset data/cln/cln_fm_330K --scheme protein
+    md-sim-cgschnet-priors --dataset <data-root>/<system>_fm_<T>K
+    md-sim-cgschnet-priors --dataset <data-root>/<system>_fm_<T>K --scheme protein
 """
 
 import argparse
@@ -61,7 +61,7 @@ def bead_types(aa_topology: md.Topology, indices: np.ndarray) -> Tensor:
 
     The transferable models' scheme, which ``CGSchNetPotential`` checks for: N, C and O share one
     type across residues and CA carries the residue identity. Types are numbered in order of first
-    appearance, so a molecule whose beads are all distinct (ala2) gets ``arange``.
+    appearance, so a molecule whose beads are all distinct gets ``arange``.
 
     :param aa_topology: All-atom topology.
     :param indices: All-atom index of each bead, in bead order.
@@ -456,7 +456,7 @@ def build_priors(
     :param n_blocks: Contiguous time blocks each run is cut into.
     :param n_configurations: Evenly spaced frames written as starting configurations.
     :param scheme: ``"graph"`` for terms read off the all-atom bond graph (any bead set, e.g.
-        ala2's ``AL_CG_MAP``), ``"protein"`` for the transferable model's terms on N CA CB C O.
+        a bead map such as ``AL_CG_MAP``), ``"protein"`` for the transferable model's terms on N CA CB C O.
     :param chunk: Frames per prior-force forward; lower it when a large molecule runs out of memory.
     :return: Summary of what was written.
     :raises ValueError: If the dataset already has delta forces, or on an unknown scheme."""
