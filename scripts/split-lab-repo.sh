@@ -21,7 +21,9 @@
 #
 # See docs/split-runbook.md for what to do before and after.
 
-set -euo pipefail
+# -E so the ERR trap below also fires for a command that fails inside `run` or `emit`:
+# without errtrace a shell function does not inherit it, and the split would die silently.
+set -Eeuo pipefail
 
 DRY_RUN=0
 for arg in "$@"; do
@@ -179,7 +181,16 @@ if [ "$FAILED" -ne 0 ]; then
     fi
 fi
 
-trap 'echo; echo "error: the split stopped part-way. $DEST is incomplete: check it, then remove it (rm -rf) and rerun." >&2; echo "md-simulations/beamtime is only moved by the very last step." >&2' ERR
+on_error() {
+    echo >&2
+    echo "error: the split stopped part-way. $DEST is incomplete." >&2
+    echo "Recover by hand, in this order:" >&2
+    echo "  1. If $DEST/beamtime exists, the run store was already moved out of md-simulations:" >&2
+    echo "     move it back ('mv $DEST/beamtime $SRC/beamtime') before anything else." >&2
+    echo "  2. Then remove the half-made clone ('rm -rf $DEST') and rerun." >&2
+    echo "Nothing else in md-simulations was touched; beamtime moves in the very last step." >&2
+}
+trap on_error ERR
 
 # ---- the split -------------------------------------------------------------------------------
 
@@ -268,6 +279,11 @@ orchestration scripts stay."
 
 say "7. Move the untracked Beamtime run store (last step; the only change to md-simulations)"
 if [ -d "$SRC/beamtime" ]; then
+    # Refuse rather than let mv nest the store as $DEST/beamtime/beamtime.
+    if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEST/beamtime" ]; then
+        echo "error: $DEST/beamtime already exists; not moving the run store onto it." >&2
+        exit 1
+    fi
     run mv "$SRC/beamtime" "$DEST/beamtime"
 else
     echo "(nothing to move)"

@@ -243,6 +243,14 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    and `core.forces` resolve. That is the clause's intent: every name whose module needs the MD stack
    raises, every name whose module does not resolves.
 
+23. **`.mcp.json` is removed with `rm`, not `git rm`, and the lab repo's copy is installed, not moved**
+   (settled in S3's review): `.mcp.json` is listed in `.gitignore` and has never been tracked, so S4's
+   `git rm -r configs slurm .mcp.json data` would abort with "did not match any files" and delete
+   nothing. S4 therefore splits the step: `git rm -r configs slurm data` for the tracked trees and a
+   plain `rm -f .mcp.json`. On the lab side the same fact means `docs/lab-repo-mcp.json` is written into
+   the clone as an untracked, ignored file (S3 step 5) and is never committed there either; each
+   checkout's `.mcp.json` is local.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
@@ -751,7 +759,8 @@ This is the irreversible half, and it runs only after the user confirms the clon
 exists in `simulations` with its full history.
 
 1. Verify the sibling repo first, as the Risks line requires.
-2. `git rm -r configs slurm .mcp.json data`.
+2. `git rm -r configs slurm data` for the tracked trees, then `rm -f .mcp.json` — it is
+   git-ignored and untracked, so `git rm` would fail and delete nothing (Decision 23).
 3. `.gitignore`: remove the `data/*`, `!data/README.md`, `output/`, `slurm/output/`, `beamtime/` and
    `configs/generated/` rules. Keep the trajectory extensions (examples and tests still produce them), the
    Python and tooling caches, `core.[0-9]*` and `=*`.
