@@ -8,7 +8,8 @@ is that switching engines doesn't mean rewriting your setup.
 This is the package. It holds the engines, the typed config models, the differentiable torch
 potentials and the `md-sim` command; it contains no configs for particular systems, no job
 scripts and no knowledge of any cluster. A research repo that runs campaigns with it keeps those
-itself (see [Workspaces](#workspaces)).
+itself (see [Workspaces](#workspaces)); ours is the sibling `simulations` repo, which holds the
+configs, the hand-written job scripts, the Beamtime run log and the simulation data.
 
 The base install is three dependencies (`numpy`, `pydantic`, `pyyaml`): enough for configs, the
 workspace, the JSON Schema and `md-sim check-job`. What else you need depends on the use:
@@ -225,7 +226,7 @@ A result is the envelope the `--json` command prints plus `"workspace"`; a failu
 against `config_dir`, a relative script against the workspace root. `new_config` writes only a
 `.yaml` file inside `config_dir` and never the workspace descriptor or `sites/`. The tool set is
 read-and-author only: nothing starts a simulation or calls `sbatch`, and run state stays with the
-beamtime server. `docs/lab-repo-mcp.json` is a draft `.mcp.json` for the `simulations` repo.
+beamtime server. The `simulations` repo installs a git-ignored `.mcp.json` that starts both.
 
 ## Engines
 

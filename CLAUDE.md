@@ -104,8 +104,8 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   plus `"workspace"`, so the CLI stays the one surface. Core-only imports; the `mcp` SDK (the `mcp`
   extra) is imported inside `build_server`, and its absence is `McpUnavailable` (exit 1). A new tool
   is a `make_tools` entry plus a `TOOL_DESCRIPTIONS` line; never one that runs or submits a job.
-  `new_config` refuses any output outside `config_dir`. `docs/lab-repo-mcp.json` is the draft
-  `.mcp.json` for the lab repo.
+  `new_config` refuses any output outside `config_dir`. The lab repo installs its own git-ignored
+  `.mcp.json` that starts this server beside the beamtime one.
 - `src/md_simulations/torch_potentials/` — differentiable torch potentials built from
   a config (`torch-potentials` extra). `bridge`/`potential`/`batch` need torch;
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the

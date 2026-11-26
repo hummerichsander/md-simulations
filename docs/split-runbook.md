@@ -1,5 +1,11 @@
 # Splitting the lab half out of md-simulations
 
+> **Done (2026-11-26), kept as a record.** The split ran and ticket S4 removed the lab half from this
+> repo, together with the `docs/lab-repo-*` and `docs/workspace-md-draft.md` drafts the script consumed
+> (still in git history before the S4 commit). `scripts/split-lab-repo.sh` therefore cannot run
+> again: its preconditions require those drafts. The sections below are what was done and the
+> follow-ups that stay yours.
+
 `scripts/split-lab-repo.sh` creates the sibling repo `/remote/gpu04/hummerich/projects/simulations`
 from this one: configs, hand-written job scripts, the Beamtime store, the simulation data and the
 workspace descriptor. It is run by you, outside Claude Code (the sandbox cannot write outside
@@ -133,6 +139,7 @@ hint naming a deleted one-liner (`slurm/ala2-cgschnet-330K.sh` in `ala2-cgschnet
 
 1. Tell the planning session the clone exists; S4 (delete the lab half from the package) runs next. S4
    removes `.mcp.json` from this checkout, which is untracked, so it uses `rm`, not `git rm`.
-2. Paste `docs/workspace-md-draft.md` into `claude-instructions/workspace.md` (you edit that file).
-3. S4 deletes the `docs/lab-repo-*` and workspace drafts; the script has already installed what the lab
+2. Paste the former `docs/workspace-md-draft.md` into `claude-instructions/workspace.md` (you edit that
+   file); recover it with `git show <S4 commit>^:docs/workspace-md-draft.md`.
+3. S4 deleted the `docs/lab-repo-*` and workspace drafts; the script had already installed what the lab
    repo needs from them.

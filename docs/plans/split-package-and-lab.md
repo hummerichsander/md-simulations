@@ -747,7 +747,7 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 6. Templates: keep `ala2-amber14-implicit-330K.sh` (plain single run), `cln-cgschnet-330K.sh` (cgschnet) and
    `trpcage-amber14-implicit-seeded-330K.sh` (a run with extra setup) as new `*.sh.example` template files in the lab repo.
 
-### S4. Delete the lab half from the package (sonnet + review) — code
+### S4. Delete the lab half from the package (sonnet + review) — code — **done**
 
 - **Touches:** `configs/` (82 files removed), `slurm/` (30 scripts removed), `.mcp.json` (removed),
   `data/README.md` (removed), `.gitignore` (the `data/*`, `beamtime/`, `slurm/output/`, `configs/generated/`
