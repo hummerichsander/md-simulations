@@ -398,7 +398,7 @@ A wrong partition queues forever, a wrong data root silently writes a 10 ns traj
 
 ## C. The agent-facing CLI
 
-### C1. `md-sim <noun> <verb>`, `--json`, and aliases (sonnet + review) — code
+### C1. `md-sim <noun> <verb>`, `--json`, and aliases (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/cli.py` (removed, becomes a package), new `src/md_simulations/cli/__init__.py`,
   new `src/md_simulations/cli/main.py`, new `src/md_simulations/cli/_output.py`, new

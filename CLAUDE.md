@@ -71,6 +71,15 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `sites/<site>.yaml` (`Site`): where configs, data and the run store live and which cluster this is.
   Nothing else in `src/` may name a partition, a venv path or a data directory. Exported from
   `md_simulations.workspace`, not from `config`.
+- `src/md_simulations/cli/` — the `md-sim` noun/verb dispatcher. `main.py` parses `run`, `check-job`
+  and the `config` group itself; `prep`, `analysis` and `sampling` pass everything after the verb to
+  the standalone script via `_dispatch.py`, whose table holds `module:function` *strings* (a verb's
+  module is imported only when chosen, so help and listings load no torch/openmm) and sets
+  `sys.argv[0]` to `md-sim-<verb>` so usage lines match the alias. `_output.py` is the shared
+  `--json` envelope (`{"ok": true, ...}` / `{"ok": false, "error": {"type", "message"}}`; exit
+  0 ok, 1 failure, 2 usage). The 14 `md-sim-*` entry points in `pyproject.toml` stay as aliases of
+  the same mains, and `tests/test_cli.py` pins them against the dispatch table. A new script gets
+  an alias, a `GROUPS` entry and a `SUMMARIES` line.
 - `src/md_simulations/preflight.py` — `md-sim check-job`: `parse_script` reads `#SBATCH` and
   `md-sim run` out of a shell script, `check_job` checks them against the workspace, site and configs.
   Core-only imports. An undeterminable fact is `skipped`, never a pass.

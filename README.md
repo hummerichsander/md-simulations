@@ -165,6 +165,20 @@ order — which is what every per-frame array derived from the same trajectory (
 scores, held-out frame indices) is indexed by. Velocity draws are keyed to the absolute frame
 index, so rerunning one shard reproduces exactly the frames it owned.
 
+## The `md-sim` command
+
+`md-sim` is one entry point: `md-sim run`, `md-sim check-job`, and the groups `config`, `prep`,
+`analysis` and `sampling` (`config` lists no verbs yet). `md-sim <group>` lists a group's verbs and `md-sim --json` lists the whole
+surface, so nothing has to be known in advance. `md-sim <group> <verb> ...` runs the standalone
+script of the same name with its arguments untouched, so `md-sim prep cgschnet-priors --help` prints
+exactly what `md-sim-cgschnet-priors --help` does; those `md-sim-*` commands stay installed.
+
+`--json` is on every `md-sim` command (a script behind a group keeps its own options). It prints one
+JSON object on stdout: `{"ok": true, ...}` on success and `{"ok": false, "error": {"type",
+"message"}}` with a non-zero exit on failure (1 expected failure, 2 usage). Under
+`md-sim run <config> --json` the run's own logging goes to stderr and the object is
+`{"ok", "config", "data_root", "output_dir", "engine", "system", "steps"}`.
+
 ## Starting a new system
 
 Copy the template for your engine — every field is commented — then edit and run:
@@ -190,7 +204,7 @@ workspace cannot be read. A fact the script does not state statically (a config 
 variable, a data root exported from `$PWD`) is reported `skipped`, never passed; a workspace without a
 site, or a site with no `partitions`, skips the site checks. Relative paths resolve against the
 workspace root, the submit directory. `--json` prints `{"ok", "checks": [{"name", "ok", "status",
-"detail"}]}`.
+"detail"}]}`, or the failure envelope above (exit 2) when the script or workspace cannot be read.
 
 ## Engines
 
