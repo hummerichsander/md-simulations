@@ -183,6 +183,12 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
 15. **The data root stays outside both repos** at `/remote/gpu04/hummerich/data`, reached from the lab repo by
    a gitignored `data/` symlink per `claude-instructions/data.md`. The package never defaults a data root.
 
+16. **`md-workspace.yaml` discovery is the package's own, not beamtime's** (settled in W1's review, from W1's
+   "Stop if"): `beamtime.sdk.paths.find_root` finds a `beamtime.yaml` (or the git root) for the run store and
+   is a different descriptor; reusing it would also put beamtime — a `simulate`-extra dependency under
+   Decision 9 — on the core import path that `workspace.py`, `md-sim config` and `check-job` must stay free
+   of. `workspace.py` therefore keeps its own upward walk.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
