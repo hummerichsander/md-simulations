@@ -188,9 +188,10 @@ if [[ ${RESUME:-0} == 1 ]] && ! python -m md_simulations.cli run --help 2>/dev/n
     echo "  VIRTUAL_ENV= ${VIRTUAL_ENV:-<unset>}" >&2
     echo "  PYTHONPATH = ${PYTHONPATH:-<unset>}" >&2
     python - >&2 <<'PY'
-import md_simulations.cli as c, sys
-print(f"  module     = {c.__file__}")
-print(f"  has resume = {'--resume' in open(c.__file__).read()}")
+import md_simulations.cli as c, pathlib, sys
+pkg = pathlib.Path(c.__file__).parent
+print(f"  module     = {pkg}")
+print(f"  has resume = {any('--resume' in f.read_text() for f in pkg.glob('*.py'))}")
 print("  sys.path   =")
 for entry in sys.path:
     print(f"      {entry}")

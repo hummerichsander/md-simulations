@@ -157,7 +157,7 @@ def test_no_torch_import_on_help() -> None:
 
 
 def test_aliases_match_pyproject() -> None:
-    """All 15 ``md-sim-*`` entry points exist and point where the dispatch table does.
+    """All 15 entry points exist: ``md-sim`` plus the 14 ``md-sim-*`` aliases of the table.
 
     :return: None."""
     tomllib = pytest.importorskip("tomllib")
