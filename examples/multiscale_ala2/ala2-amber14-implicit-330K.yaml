@@ -7,9 +7,9 @@
 # the smaller timestep -- an X-H stretch has a ~11 fs period.
 #
 # The reference frames in data/ were produced by prepare_data.py from
-# configs/ala2-amber14-implicit-remd-330K-train.yaml (101 ns of T-REMD, same molecule and
-# force field, integrated with constraints) and then relaxed into this unconstrained
-# potential.
+# the `simulations` repo's configs/ala2-amber14-implicit-remd-330K-train.yaml (101 ns of
+# T-REMD, same molecule and force field, integrated with constraints) and then relaxed into
+# this unconstrained potential.
 
 engine: amber
 system: ala2

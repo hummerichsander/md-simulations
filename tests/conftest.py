@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -70,10 +71,6 @@ def beamtime_logdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return logdir
 
 
-# Resource block merged into a sample when a config needs a SLURM section.
-SAMPLE_SLURM = {"job_name": "md-t", "partition": "a30", "gres": "gpu:1"}
-
-
 @pytest.fixture
 def sample_configs() -> dict[str, dict]:
     """Return per-engine sample config payloads (deep-copied per test).
@@ -106,3 +103,16 @@ def cg_mapping_file(tmp_path: Path) -> Path:
     path = tmp_path / "mapping.json"
     path.write_text(json.dumps({"beads": [["ALA", "CA", 1], ["GLY", "CA", 8]]}))
     return path
+
+
+@pytest.fixture(scope="session")
+def data_root() -> Path:
+    """The simulation data root for tests that read real data, or skip without one.
+
+    ``MD_DATA_ROOT`` is the only source: the package holds no data of its own and must
+    never default a root, so the tests that need one skip without it.
+
+    :return: The data-root directory."""
+    if env := os.environ.get("MD_DATA_ROOT"):
+        return Path(env).expanduser()
+    pytest.skip("needs MD_DATA_ROOT")

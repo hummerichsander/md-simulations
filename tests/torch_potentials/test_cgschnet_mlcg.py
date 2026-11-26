@@ -6,7 +6,7 @@ This module covers the gap between them: the *semantics* of the hand-built batch
 neither can see. ``CGSchNetPotential._static_batch`` reimplements what mlcg does via
 torch-geometric's ``collate``, so the honest test is to run both and demand equality.
 
-Skipped unless mlcg and the (git-ignored) data root are present."""
+Skipped unless mlcg and a data root (``MD_DATA_ROOT``) are present."""
 
 import copy
 from pathlib import Path
@@ -23,25 +23,25 @@ from torch_geometric.data.collate import collate  # noqa: E402
 from md_simulations.prep.cgschnet_embeddings import extract_atom_types  # noqa: E402
 from md_simulations.torch_potentials import build_potential_from_file  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[2]
-DATA_ROOT = REPO / "data"
-CONFIG = REPO / "configs" / "trpcage-cgschnet-300K.yaml"
-CONFIGURATIONS = DATA_ROOT / "trp-cage" / "configurations.pt"
-BEAD_PDB = DATA_ROOT / "pdbs" / "2JOF_5B-CG.pdb"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+CONFIG = FIXTURES / "trpcage-cgschnet.yaml"
+BEAD_PDB = FIXTURES / "2JOF_5B-CG.pdb"
+CONFIGURATIONS_SUBDIR = Path("trp-cage") / "configurations.pt"
 
 N_FRAMES = 3
 
 
 @pytest.fixture(scope="module")
-def potential():
+def potential(data_root: Path):
     """A potential built from the real config, in the model's own bead order.
 
+    :param data_root: The data root.
     :return: A ``CGSchNetPotential``."""
-    for path in (CONFIG, CONFIGURATIONS, BEAD_PDB):
+    for path in (CONFIG, data_root / CONFIGURATIONS_SUBDIR, BEAD_PDB):
         if not path.exists():
-            pytest.skip(f"{path} not present (the data root is git-ignored)")
+            pytest.skip(f"{path} not present (the data root is not part of the repo)")
     return build_potential_from_file(
-        md.load_topology(str(BEAD_PDB)), CONFIG, data_root=DATA_ROOT
+        md.load_topology(str(BEAD_PDB)), CONFIG, data_root=data_root
     )
 
 
@@ -77,15 +77,16 @@ def test_hand_built_batch_matches_torch_geometric_collate(potential) -> None:
         assert torch.equal(term["mapping_batch"], expected["mapping_batch"]), name
 
 
-def test_atom_types_agree_with_the_embeddings_helper(potential) -> None:
+def test_atom_types_agree_with_the_embeddings_helper(potential, data_root: Path) -> None:
     """The template's ``atom_types`` match what ``extract_atom_types`` reports.
 
     An independent reader of the same file, so a wrong ``replica`` index or a silently
     reshaped field would show up here.
 
     :param potential: The fixture potential.
+    :param data_root: The data root.
     :return: None."""
-    configurations = torch.load(str(CONFIGURATIONS), map_location="cpu", weights_only=False)
+    configurations = torch.load(str(data_root / CONFIGURATIONS_SUBDIR), map_location="cpu", weights_only=False)
     expected = extract_atom_types(configurations)
 
     np.testing.assert_array_equal(potential._template.atom_types.cpu().numpy(), expected)

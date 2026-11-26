@@ -22,9 +22,9 @@ both unbiased), so it is the default.
 
 Usage::
 
-    md-sim-cgschnet-dataset --run data/trp-cage/AMBER14_implicit_scan_360K \\
-        --bead-pdb data/pdbs/2JOF_5B-CG.pdb --out data/trp-cage/fm_360K \\
-        --cgschnet-config configs/trpcage-cgschnet-300K.yaml --name trpcage
+    md-sim-cgschnet-dataset --run <data-root>/<system>/AMBER14_implicit_scan_360K \\
+        --bead-pdb <data-root>/pdbs/<system>-CG.pdb --out <data-root>/<system>/fm_360K \\
+        --cgschnet-config <config>.yaml --name <system>
 
 With ``--cgschnet-config`` the fixed prior's forces are subtracted and an mlcg-ready
 ``.h5`` is written in the layout of ``examples/h5_pl/single_molecule/1L2Y_prior_tag.h5``:
@@ -576,7 +576,7 @@ def prior_forces(
     """Evaluate the fixed prior's forces on CG coordinates.
 
     SchNet is trained on *delta* forces — the CG force minus the prior's — because at
-    simulation time the prior is added back. mlcg's own trp-cage example stores exactly
+    simulation time the prior is added back. mlcg's own example stores exactly
     ``cg_delta_forces``, so the subtraction has to happen here. The prior-only potential is
     the shipped model with its single trainable term (``SchNet``) dropped; every other term
     carries zero parameters and is a fixed analytic potential.
@@ -688,8 +688,8 @@ def cg_embeddings(cgschnet_config: Path, data_root: Path, bead_pdb: Path) -> np.
     The types live in ``configurations_file`` in the *model's* bead order, while the
     dataset is written in ``bead_pdb`` order. ``bead_permutation`` gives ``perm`` with
     ``perm[j]`` the caller-bead index at model slot ``j``, so recovering caller order is
-    a scatter (``embeds[perm] = types``) and *not* a gather. On trp-cage the two
-    topologies are the same file and ``perm`` is the identity, so the wrong direction
+    a scatter (``embeds[perm] = types``) and *not* a gather. When the two
+    topologies are the same file and ``perm`` is the identity, the wrong direction
     would go unnoticed here and silently corrupt the next system.
 
     :param cgschnet_config: Path to the cgschnet simulation config.

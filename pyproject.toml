@@ -11,21 +11,26 @@ authors = [
 # 3.12 (mlcg is ==3.12.*) via a marker below, so it is simply unavailable on
 # 3.10/3.11 rather than forcing the whole project (and its consumers) to 3.12.
 requires-python = ">=3.10,<3.13"
+# Just enough for configs, the workspace, the JSON Schema and `md-sim check-job`. The MD
+# stack is the `simulate` extra, the torch wrapper the `torch-potentials` one, so each of
+# the package's two uses pays only for what it imports.
 dependencies = [
+    "numpy>=1.26",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Running simulations: every engine, `md-sim run`, md_simulations.core and the sampling
+# scripts. Without it they raise a ModuleNotFoundError naming this extra.
+simulate = [
     # Pinned: batched CGSchNet replicas are logged through beamtime's internal run API
     # (core/tracking.py); kept at a floor rather than an exact pin since 0.3.0.
     "beamtime>=0.3.0",
     "openmm>=8.4.0.post2",
     "mdtraj>=1.10.3",
-    "parmed>=4.3.1",
-    "numpy>=1.26",
-    "pydantic>=2.6",
-    "pyyaml>=6.0",
     "tqdm>=4.67.1",
-    "ipykernel>=7.3.0",
 ]
-
-[project.optional-dependencies]
 # Resolves openawsem from PyPI. CAVEAT: release 1.1.1 is missing the `PDBParser`
 # and `product` imports inside `read_memory` (functionTerms/templateTerms.py), so
 # any config with `use_associative_memory: true` raises NameError. Until that is
@@ -62,8 +67,8 @@ openmm-cuda = [
 ]
 # The CUDA-13 wheel set for the cgschnet stack, matching the cluster's cuda/13.0.
 # Orthogonal to the cgschnet extras: add it when this project *is* the top-level one
-# and needs the CUDA-13 torch, and install torch with the matching backend
-# (`uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`). It needs the
+# and needs the CUDA-13 torch (`uv sync --extra cgschnet --extra cu130`; the extra
+# pins the wheel indexes, so no --torch-backend is needed). It needs the
 # [tool.uv] index setup below. A consumer that pins its own torch takes `cgschnet`
 # alone and keeps its CUDA line. Includes `openmm-cuda`, since a CUDA-13 host wants
 # the CUDA-13 OpenMM platform too.
@@ -71,16 +76,42 @@ cu130 = [
     "md-simulations[openmm-cuda]",
     "mlcg[cu130]; python_full_version >= '3.12'",
 ]
+# `md-sim mcp`: the stdio MCP server over the config surface (md_simulations.mcp_server).
+# Imported only inside `serve()`, so nothing else needs it; the lab repo installs it and
+# a torch consumer never does.
+mcp = ["mcp>=2.0,<3"]
 viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
-# Trajectory analysis (TICA and related dimensionality reduction).
-analysis = ["deeptime>=0.4.4", "scipy>=1.11"]
+# Trajectory analysis (TICA, CVs, basins, free-energy surfaces). The modules import mdtraj,
+# matplotlib and scienceplots (inside the functions that need them), so they are declared here
+# rather than left to arrive with something else.
+analysis = [
+    "deeptime>=0.4.4",
+    "scipy>=1.11",
+    "mdtraj>=1.10.3",
+    "matplotlib>=3.8",
+    "scienceplots>=2.2.0",
+]
+# Trajectory/structure preparation (md_simulations.prep): mdtraj for the frame and
+# mapping tools, networkx for the vendored olives.py. None of this needs openmm. The
+# CGSchNet-side scripts here (cgschnet_dataset/_finetune/_priors/_reexport) need torch and
+# mlcg on top and are covered by `cgschnet-dataset` below.
+prep = ["mdtraj>=1.10.3", "networkx>=3.0"]
 # Differentiable torch potentials built from a config (see
-# md_simulations.torch_potentials). openmm is already a core dep, so
-# OpenMMCalculator needs nothing extra; ase supplies the engine-agnostic
-# calculator contract and torch the autograd bridge. `torch` is deliberately not
-# pinned to an index (see [tool.uv.sources]), so it resolves from PyPI unless the
-# top-level project says otherwise -- e.g. `--torch-backend=cu130` or `=cpu`.
-torch-potentials = ["torch>=2.0", "ase>=3.22"]
+# md_simulations.torch_potentials). Deliberately no openmm and no beamtime: ase
+# supplies the engine-agnostic calculator contract and torch the autograd bridge, and
+# mdtraj reads trajectories for CGSchNetPotential and ResampledBondPotential. A
+# consumer calling build_potential_from_file on an OpenMM config takes
+# `openmm-potentials` instead. `torch` is deliberately not pinned to an index (see
+# [tool.uv.sources]), so it resolves from PyPI unless the top-level project says
+# otherwise -- e.g. by taking the `cu130` extra, or via UV_TORCH_BACKEND.
+torch-potentials = ["torch>=2.0", "ase>=3.22", "mdtraj>=1.10.3"]
+# What a consumer needs to call `build_potential_from_file` on an AMBER/AWSEM config:
+# the torch wrapper plus the MD stack that builds the OpenMM system (OpenMMCalculator).
+# A CGSchNet consumer takes `cgschnet-potentials` and gets no openmm at all.
+openmm-potentials = [
+    "md-simulations[torch-potentials]",
+    "md-simulations[simulate]",
+]
 # The differentiable CG potential (md_simulations.torch_potentials.cgschnet) needs
 # both halves: mlcg to unpickle and run the model, torch/ase for the rest of the
 # package. mlcg pins Python ==3.12.*, so its half is marker-gated and this extra
@@ -101,11 +132,11 @@ cgschnet-dataset = [
     "h5py>=3.10",
 ]
 # Everything at once. NOTE: `all` includes `cu130`, so it inherits the heavy CUDA-13
-# torch stack and needs the [tool.uv] cu130 index setup below (and a CUDA-13 host, or
-# a `--torch-backend` override) -- same constraint the standalone `cu130` extra
+# torch stack and needs the [tool.uv] cu130 index setup below (and a CUDA-13 host)
+# -- same constraint the standalone `cu130` extra
 # carries. Drop `cu130` from the list to keep a different CUDA line.
 all = [
-    "md-simulations[awsem,martini,gromacs,cgschnet,cu130,viz,analysis,torch-potentials]",
+    "md-simulations[simulate,awsem,martini,gromacs,cgschnet,cu130,viz,analysis,prep,openmm-potentials,mcp]",
 ]
 
 [project.urls]
@@ -198,7 +229,7 @@ mlcg = { git = "https://github.com/ClementiGroup/mlcg.git", rev = "b0162fe8604e2
 # line on every consumer -- and mixing it with PyPI-resolved nvidia-* wheels yields
 # an inconsistent stack (missing libcudnn.so.9 / libcusparseLt.so.0, i.e. `import
 # torch` fails outright). The CUDA line is the top-level project's call: here, install
-# with `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer that
+# with `uv sync --extra cgschnet --extra cu130`; a consumer that
 # pins its own torch takes `cgschnet` without `cu130` and adds its own index pins. The
 # index definitions are kept (explicit, so they are only consulted when something is
 # pinned to them).

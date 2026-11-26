@@ -16,7 +16,7 @@ marked `+ review` with `/review-ticket docs/plans/split-package-and-lab.md <ID>`
 - **Done means:** `md-simulations` is a package repo only — `src/`, `tests/`, `examples/`, `docs/` — that
   clones, installs and tests green on a machine with no data root and no cluster. A sibling repo
   `/remote/gpu04/hummerich/projects/simulations` holds `configs/`, the orchestration slurm scripts, the
-  beamtime store, the `data/` symlink, `md-workspace.yaml` and `sites/`. The package no longer contains any
+  beamtime store, the git-ignored `data/` directory (the simulation data, moved there), `md-workspace.yaml` and `sites/`. The package no longer contains any
   knowledge of this cluster: no partition defaults, no `.venv/bin/activate`, no `$PWD/data`. Its two uses
   are separately installable: the package alone pulls three dependencies (`numpy`, `pydantic`, `pyyaml`),
   `[torch-potentials]` adds torch and ASE without openmm or beamtime, and `[simulate]` adds the MD stack;
@@ -53,8 +53,8 @@ Evidence: **reproduced** (run), **real data** (seen in the user's data), **code*
 | 7 | The git-level split is far smaller than it looks: `beamtime/` is gitignored and untracked (0 tracked files) and `data/*` is gitignored except the README, so only `configs/`, `slurm/*.sh` and `.mcp.json` actually move in git | `.gitignore:1-7`, `git ls-files beamtime \| wc -l` → 0 | reproduced | S3, S4 |
 | 9 | `import md_simulations` eagerly imports openmm, beamtime and tqdm, so no slim install is possible whatever the extras say | the lazy-torch design in `src/md_simulations/torch_potentials/__init__.py` is defeated one level down: `src/md_simulations/torch_potentials/build.py:41` imports `md_simulations.engines` at module scope, and `src/md_simulations/cli.py:7` does the same | reproduced (`import md_simulations`, then inspect `sys.modules`) | P1 |
 | 10 | `parmed>=4.3.1` is a runtime dependency with zero imports anywhere, and `ipykernel>=7.3.0` — a notebook convenience pulling pyzmq, jupyter-client, debugpy and traitlets — sits in the same list | dependencies accumulated while the repo was also the simulation directory | reproduced (`rg -n 'parmed' src/ tests/ examples/` → nothing) | P2 |
-| 11 | `networkx` (`prep/olives.py`) and `matplotlib`/`scienceplots` (eager in `analysis/{tica,cvs,basins}.py`) are imported but declared by no extra; they resolve only because something else drags them in | `analysis` declares `deeptime`/`scipy` only; `viz` is a separate opt-in | reproduced | P2 |
-| 8 | `data/` is a real directory here, not the symlink to `/remote/gpu04/hummerich/data` that `claude-instructions/data.md` mandates | predates the convention | reproduced (`ls -la data`) | S3 |
+| 11 | `networkx` (`prep/olives.py`) and `matplotlib`/`scienceplots` (imported by `analysis/{tica,cvs,basins}.py`) are imported but declared by no extra; they resolve only because something else drags them in | `analysis` declares `deeptime`/`scipy` only; `viz` is a separate opt-in | reproduced | P2 |
+| 8 | `data/` is a real directory here (589 GB: `ala2 alaX cln models pdbs trp-cage`), and the shared root's `cgschnet-data` symlinks into it | the simulation data was always kept in the repo; the shared root holds only derived datasets (Decision 24) | reproduced (`ls -la data`, `du -sh`) | S3 |
 
 ## Brief
 
@@ -180,12 +180,94 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    has no Slurm client, and a 40-hour GPU job is not something an agent starts unattended. The agent
    authors, validates and checks; the user submits. Rejected: a `run` tool for "short" jobs, since short
    is not checkable from the config alone.
-15. **The data root stays outside both repos** at `/remote/gpu04/hummerich/data`, reached from the lab repo by
-   a gitignored `data/` symlink per `claude-instructions/data.md`. The package never defaults a data root.
+15. **The package never defaults a data root**; the lab repo's data root is its own `data/` (amended by
+   Decision 24 — the original wording, "outside both repos at `/remote/gpu04/hummerich/data`, reached
+   by a `data/` symlink", is superseded).
+
+16. **`md-workspace.yaml` discovery is the package's own, not beamtime's** (settled in W1's review, from W1's
+   "Stop if"): `beamtime.sdk.paths.find_root` finds a `beamtime.yaml` (or the git root) for the run store and
+   is a different descriptor; reusing it would also put beamtime — a `simulate`-extra dependency under
+   Decision 9 — on the core import path that `workspace.py`, `md-sim config` and `check-job` must stay free
+   of. `workspace.py` therefore keeps its own upward walk.
+
+17. **The orchestration scripts carry their own job names and walltimes** (settled in W2's review): four
+   submit-mode scripts (`slurm/ala2-amber14-implicit-endpoints.sh`,
+   `slurm/alaX-amber14-implicit-330K-replicas.sh`, `slurm/alaX-amber14-implicit-remd-330K.sh`,
+   `slurm/cln-fiber-amber14-implicit-330K.sh`) read `job_name`/`time` out of each config's `slurm:` block
+   with an `awk` helper and submitted with empty `--job-name=`/`--time=` once W2 deleted the block. The
+   values are now literals in the scripts, which is Decision 4 applied consistently — queue facts live in
+   the hand-written script, not in the description of a physical system. The scripts move to the lab repo in
+   S3 self-contained; nothing there reads a config for queue parameters.
+
+18. **A job's need for a GPU is declared, not inferred** (settled in W3's review, amending Decision 4):
+   no config model has a `platform` field, so `check-job` cannot read "this job needs a GPU" out of the
+   config. `md-sim check-job --require-gpu` makes the author or the agent writing the script state it;
+   without the flag the `gres` check is `ok` when a GPU is requested and `skipped` otherwise, never a
+   fail. Decision 4's `platform: CUDA` line stands as the motivating mistake, not as a description of how
+   the check works. C3's `check_job` MCP tool therefore takes an optional `require_gpu` argument
+   alongside the script path.
+
+19. **`md_simulations.core` resolves its names lazily, so the numpy-only ones stay reachable**
+   (settled in P1's review): P1 wrapped `core/__init__`'s eager imports in a `simulate`-extra hint, which
+   is right for `setup_logger`/`start_run`, but the package `__init__` runs on any submodule import, so
+   `md_simulations.core.forces` — numpy only — is unimportable without openmm. That was already true
+   before P1 (the eager imports pulled openmm all the same); P1 only made the message clearer. It blocks
+   P2's layering: `prep/migrate_forces.py` is numpy plus `core.forces`, and
+   `prep/cgschnet_dataset.py` is mdtraj plus `core.forces`, so the `prep` and `cgschnet-dataset` extras
+   as drawn in P2 step 6 would resolve to a package their modules cannot import. The fix is the
+   `_LAZY`/`__getattr__` pattern of `torch_potentials/__init__.py` applied to `core/__init__`: the
+   openmm/beamtime-backed names resolve on first access with `EXTRA_HINT`, while
+   `md_simulations.core.forces` imports on a core install. Rejected: adding `md-simulations[simulate]`
+   to `prep`, which puts openmm back under a dataset-preparation extra and contradicts Decision 9.
+
+20. **`md-sim mcp` is listed by `md-sim --json` like every other command** (settled in C3's review):
+   C3 kept it out of `TOP_COMMANDS` to leave `tests/test_cli.py`'s pinned set untouched, which made the
+   listing that `_surface()` documents as "every command, so an agent can enumerate the CLI without
+   reading source" untrue — the Goal's "an agent can obtain the surface without reading source" has to
+   include the server an agent would start. `md-sim --help` listed it all along, so the two front doors
+   disagreed. The pinned set in `tests/test_cli.py` is now `{run, check-job, mcp}`.
+
+21. **The MCP server fails at startup when it finds no workspace** (settled in C3's review, confirming
+   C3's behaviour): `md-sim mcp` exits 2 with the `WorkspaceNotFound` message, which names both
+   `$MD_WORKSPACE` and the directories searched, instead of serving with `"workspace": null` and failing
+   every tool individually. The deployed form (`docs/lab-repo-mcp.json`) pins `MD_WORKSPACE`, so "no
+   workspace" is a misconfiguration, and one startup error in the client's log is easier to act on than
+   six tools that each repeat it. Rejected: serving workspace-less, which would add a null state to every
+   tool result and let `config_schema` — the one tool needing no workspace — mask the misconfiguration.
+
+22. **The `simulate`-hint assertion is pinned on openmm/beamtime-backed names, not on `setup_logger`**
+   (settled in P2's review, correcting P2's Done line): under Decision 19's lazy resolution
+   `from md_simulations.core import setup_logger` *resolves* on a core install — `core/logging.py` is
+   stdlib-only — so it cannot be the name that "still raises `EXTRA_HINT`". `tests/test_packaging.py`
+   asserts the hint on `create_integrator`, `start_run` and `ReplicaExchange` (openmm-, beamtime- and
+   openmm-backed respectively, both attribute access and `from`-import) and asserts that `setup_logger`
+   and `core.forces` resolve. That is the clause's intent: every name whose module needs the MD stack
+   raises, every name whose module does not resolves.
+
+23. **`.mcp.json` is removed with `rm`, not `git rm`, and the lab repo's copy is installed, not moved**
+   (settled in S3's review): `.mcp.json` is listed in `.gitignore` and has never been tracked, so S4's
+   `git rm -r configs slurm .mcp.json data` would abort with "did not match any files" and delete
+   nothing. S4 therefore splits the step: `git rm -r configs slurm data` for the tracked trees and a
+   plain `rm -f .mcp.json`. On the lab side the same fact means `docs/lab-repo-mcp.json` is written into
+   the clone as an untracked, ignored file (S3 step 5) and is never committed there either; each
+   checkout's `.mcp.json` is local.
+
+24. **The simulation data moves into the lab repo's gitignored `data/`; it does not go to the shared
+   root** (the user's decision, after S3's first version): `/remote/gpu04/hummerich/data` holds only
+   *derived* datasets, each with a `datacard.yaml`, and `md-simulations/data/` is raw run output plus
+   its inputs and trained models. S3 therefore *moves* (a rename on one filesystem, never a copy)
+   `md-simulations/data/*` into the clone's `data/`, as its last step beside the beamtime move;
+   `md-workspace.yaml` keeps `data_root: ${MD_DATA_ROOT:-./data}`, which now resolves to that real
+   directory. Which top-level directories go to the lab and which, if any, to the shared root is a
+   parameter of the script (`SPLIT_DATA_LAB`, `SPLIT_DATA_SHARED`), defaulting to everything in the lab
+   repo; the user confirms it. The shared root's `cgschnet-data` symlink (split-flows-energetics reads
+   `models/` and `pdbs/` through it) is re-pointed at the lab repo's `data/` by the user, and the
+   package's data-root rule is unchanged. Rejected: the symlink design (Decision 15's first wording),
+   which put 589 GB of non-derived data in a root with a datacard rule it cannot meet.
 
 ## S. Split and fixtures
 
-### S1. Free the package suite from `configs/` and `data/` (sonnet) — code
+### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
 
 - **Touches:** `tests/torch_potentials/test_cgschnet_regression.py` (`REPO`/`DATA_ROOT`/`CONFIG` 25–30),
   `tests/torch_potentials/test_cgschnet_mlcg.py` (`REPO`/`DATA_ROOT`/`CONFIG` 26–31), new
@@ -242,7 +324,7 @@ Measurements stay, because they are evidence for the defaults around them.
 
 ## W. Workspace, site and the slurm turnaround
 
-### W1. The workspace descriptor and site profile (sonnet + review) — code
+### W1. The workspace descriptor and site profile (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/workspace.py`, `src/md_simulations/config/load.py`
   (`resolve_data_root` 23–41), `src/md_simulations/config/__init__.py` (exports 1–30), new
@@ -285,7 +367,7 @@ is also what the agent CLI reads to orient itself.
 6. Export `Workspace`, `Site`, `load_workspace`, `WorkspaceError`, `WorkspaceNotFound` from
    `md_simulations.workspace`, not from `config` — the config package stays about configs.
 
-### W2. Delete slurm generation and the `slurm:` config block (sonnet + review) — code
+### W2. Delete slurm generation and the `slurm:` config block (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/slurm/` (whole package removed: `__init__.py`, `render.py`),
   `tests/test_slurm.py` (removed), `src/md_simulations/cli.py` (`_cmd_gen_slurm` 45–56, `p_gen` 82–90,
@@ -320,7 +402,7 @@ the queue, not about alanine dipeptide. Both go; W3 puts a checker in their plac
 6. README: delete the `gen-slurm` usage; add two sentences saying job scripts are written by hand (or by an
    agent) in the `simulations` repo against its template examples and checked with `md-sim check-job`.
 
-### W3. `md-sim check-job`: preflight an sbatch script (sonnet + review) — code
+### W3. `md-sim check-job`: preflight an sbatch script (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/preflight.py`, `src/md_simulations/cli.py` (new `check-job` parser),
   new `tests/test_preflight.py`.
@@ -330,8 +412,10 @@ the queue, not about alanine dipeptide. Both go; W3 puts a checker in their plac
   working tree: `.venv/bin/python -m md_simulations.cli check-job slurm/ala2-amber14-implicit-330K.sh` and
   `... slurm/alaX-amber14-implicit-remd-330K.sh`.
 - **Done:** a correct script reports every check `OK` and exits 0; a script whose `--partition` is not in the
-  site's `partitions` exits 1 naming the partition and the allowed set; a script whose config declares
-  `platform: CUDA` with no `--gres=gpu:1` exits 1; a script whose `md-sim run` config path does not exist
+  site's `partitions` exits 1 naming the partition and the allowed set; with `--require-gpu`, a script that
+  requests no GPU (`--gres=gpu:N` or `--gpus=N`) exits 1, and without the flag the `gres` check is `ok` when a
+  GPU is requested and `skipped` otherwise (amended: no config model has a `platform` field, so the need for
+  a GPU cannot be read from a config and the author or agent states it); a script whose `md-sim run` config path does not exist
   exits 1; `--json` prints `{"ok": bool, "checks": [{"name", "ok", "detail"}]}`; the REMD orchestration script
   (191 lines, no literal `md-sim run`) is handled, not crashed on.
 - **Risks:** a script that builds the config path in a shell variable or a loop → the config check reports
@@ -351,8 +435,8 @@ A wrong partition queues forever, a wrong data root silently writes a 10 ns traj
 2. `check_job(path, workspace, *, data_root=None) -> list[Check]` with `Check(name, status: "ok"|"fail"|
    "skipped"|"warn", detail)`. Checks, in order: `config` (each path exists and `load_config` succeeds),
    `inputs` (each config's `input_pdb`/`input_gro`/`top`/`model_file` resolves under the data root and exists),
-   `partition` (in `site.partitions` when non-empty), `gres` (if any config sets `platform: CUDA`, `--gres`
-   must match `gpu:*`), `output` (the `--output`/`--error` directory is creatable), `venv`
+   `partition` (in `site.partitions` when non-empty), `gres` (`--gres`/`--gpus` must request a GPU when
+   `--require-gpu` is passed; amended, see Done), `output` (the `--output`/`--error` directory is creatable), `venv`
    (`site.venv_activate` exists, when set).
 3. `md-sim check-job <script.sh> [--data-root P] [--json]`: exit 0 when no check failed, 1 otherwise. Human
    output is one aligned line per check, as in the Done line.
@@ -360,7 +444,7 @@ A wrong partition queues forever, a wrong data root silently writes a 10 ns traj
 
 ## C. The agent-facing CLI
 
-### C1. `md-sim <noun> <verb>`, `--json`, and aliases (sonnet + review) — code
+### C1. `md-sim <noun> <verb>`, `--json`, and aliases (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/cli.py` (removed, becomes a package), new `src/md_simulations/cli/__init__.py`,
   new `src/md_simulations/cli/main.py`, new `src/md_simulations/cli/_output.py`, new
@@ -403,7 +487,7 @@ names stay so the 13 orchestration scripts in the lab repo keep working.
 6. `md-sim run` gains `--json`: on success emit `{"ok": true, "config", "data_root", "output_dir", "engine",
    "system", "steps"}`; the run's own logging is unaffected.
 
-### C2. `md-sim config schema|validate|describe|ls|new` (sonnet) — code
+### C2. `md-sim config schema|validate|describe|ls|new` (sonnet) — code — **done**
 
 - **Touches:** new `src/md_simulations/cli/config_cmds.py`, new-in-C1 `src/md_simulations/cli/main.py` (the
   `config` group), `tests/test_cli.py`.
@@ -445,7 +529,7 @@ without running a simulation.
    (comments are lost — say so in `--help`), validate the result before writing, refuse to overwrite without
    `--force`.
 
-### C3. `md-sim mcp`: the same surface over MCP (sonnet + review) — code
+### C3. `md-sim mcp`: the same surface over MCP (sonnet + review) — code — **done**
 
 - **Touches:** new `src/md_simulations/mcp_server.py`, `src/md_simulations/cli/main.py` (an `mcp`
   subcommand), `pyproject.toml` (an `mcp` extra), new `tests/test_mcp_server.py`,
@@ -473,7 +557,8 @@ see the same answers, and anything the CLI learns later the server gets for free
 1. `mcp_server.py`: build the server with the official `mcp` Python SDK, stdio transport, server name
    `md-simulations`. Import the SDK inside `serve()`, not at module scope.
 2. One handler per tool, each calling the C2 function and returning its dict unchanged. `check_job` takes
-   an absolute or workspace-relative script path and returns `{"ok", "checks"}` from W3.
+   an absolute or workspace-relative script path and an optional `require_gpu` (Decision 18) and returns
+   `{"ok", "checks"}` from W3.
 3. The workspace is resolved once at startup from `$MD_WORKSPACE` or the cwd, and reported by every tool's
    result as `"workspace"`, so an agent can see which tree it is talking about.
 4. `md-sim mcp [--workspace P]` in `src/md_simulations/cli/main.py`, importing `mcp_server` lazily.
@@ -482,7 +567,7 @@ see the same answers, and anything the CLI learns later the server gets for free
 
 ## P. Packaging and dependency layering
 
-### P1. Take openmm and beamtime out of the eager import path (sonnet + review) — code
+### P1. Take openmm and beamtime out of the eager import path (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/torch_potentials/build.py` (`from md_simulations.engines import
   BuiltSystem, OpenMMEngine, build_engine` 41, moved into the functions that use it),
@@ -523,11 +608,13 @@ down. Until this ticket lands, no arrangement of extras can produce a slim insta
    sys; print(json.dumps(sorted(sys.modules)))"` in a subprocess (a clean interpreter, not the test
    session's polluted one) and asserts the forbidden set is absent.
 
-### P2. Re-layer the dependencies (sonnet + review) — code
+### P2. Re-layer the dependencies (sonnet + review) — code — **done**
 
 - **Touches:** `pyproject.toml` (`dependencies` 16–28, `[project.optional-dependencies]` 30–120,
-  `[tool.uv]` 146–180), new `docs/lab-repo-pyproject.toml`, `README.md` (install section), `CLAUDE.md`.
-- **Read:** this plan's Findings 9–11 and Decisions 9–12; `pyproject.toml`'s existing comments on the
+  `[tool.uv]` 146–180), new `docs/lab-repo-pyproject.toml`, `README.md` (install section), `CLAUDE.md`,
+  `src/md_simulations/core/__init__.py` (the lazy resolution of Decision 19), `tests/test_packaging.py`.
+- **Read:** this plan's Findings 9–11 and Decisions 9–12 and 19; `src/md_simulations/torch_potentials/__init__.py`
+  (`_LAZY` and `__getattr__`, the pattern step 10 copies); `pyproject.toml`'s existing comments on the
   `cgschnet`/`cu130` separation — that reasoning is unchanged and must survive the edit.
 - **Check:** `.venv/bin/python -c "import tomllib,pathlib;
   tomllib.loads(pathlib.Path('pyproject.toml').read_text())"`; then **the user runs `uv lock` outside
@@ -537,7 +624,10 @@ down. Until this ticket lands, no arrangement of extras can produce a slim insta
   appear nowhere; `simulate`, `torch-potentials`, `openmm-potentials`, `mcp`, `analysis` and `prep` carry what
   their modules actually import, including the previously undeclared `networkx`, `matplotlib` and
   `scienceplots`; `all` still resolves; `uv lock` succeeds and `uv.lock` is committed in the same commit;
-  `docs/lab-repo-pyproject.toml` is a complete, ready-to-copy project file for the `simulations` repo.
+  `docs/lab-repo-pyproject.toml` is a complete, ready-to-copy project file for the `simulations` repo;
+  and, per Decision 19, `import md_simulations.core.forces` succeeds with openmm unimportable while
+  `from md_simulations.core import setup_logger` still raises `EXTRA_HINT` (both asserted in
+  `tests/test_packaging.py`, extending `test_engines_without_openmm_names_the_simulate_extra`).
 - **Risks:** an extra silently losing a dependency it used to get from core → audit every subpackage's
   third-party imports against its extra before committing; `mdtraj`, imported only inside
   `src/md_simulations/torch_potentials/cgschnet.py:275`, belongs in `torch-potentials` too, not only in `simulate`;
@@ -557,7 +647,8 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    existing comment about not pinning a torch index.
 4. New `openmm-potentials = ["md-simulations[torch-potentials]", "md-simulations[simulate]"]`, documented
    as what a consumer needs to call `build_potential_from_file` on an AMBER/AWSEM config.
-5. New `mcp = ["mcp>=1.0"]`, installed by the `simulations` repo and by no torch consumer (C3).
+5. `mcp = ["mcp>=2.0,<3"]` as C3 wrote it (the 2.x SDK's `MCPServer`; 1.x has no such class),
+   installed by the `simulations` repo and by no torch consumer (C3). `all` carries it too.
 6. `analysis` gains `mdtraj`, `matplotlib>=3.8` and `scienceplots>=2.2.0` (its modules import them
    eagerly); new `prep = ["mdtraj>=1.10.3", "networkx>=3.0"]`; `cgschnet-dataset` keeps `h5py`.
 7. `all` is rebuilt from the new names and keeps its `cu130` caveat comment.
@@ -568,10 +659,19 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    index blocks per Decision 12.
 9. README install section: four lines — the wrapper (`md-simulations[torch-potentials]`), the wrapper on
    OpenMM configs (`[openmm-potentials]`), running simulations (`[simulate]`) and the agent server (`[mcp]`).
+10. `src/md_simulations/core/__init__.py`: replace P1's `try`/`except` around the eager imports with the
+   `_LAZY` + `__getattr__` pattern of `torch_potentials/__init__.py`, keeping `EXTRA_HINT` and its
+   wording. Every re-exported name is resolved on first access; nothing is imported at module scope, so
+   `md_simulations.core.forces`, `core.replica_exchange` and `core.logging` — the submodules that need
+   no MD stack — import under the `prep` and `cgschnet-dataset` extras. (`core.freezing` is *not* one of
+   them: it imports openmm at module scope, like `integrators`, `equilibration`, `reporters`, `runner`,
+   `summary`, `remd` and `tracking`.) Audit the remaining `from md_simulations.core...` importers
+   (`prep/migrate_forces.py`, `prep/cgschnet_dataset.py`, `sampling/umbrella.py`) against the extra each
+   one belongs to; `umbrella.py` is `simulate`-side and may keep needing openmm.
 
 ## D. Documentation and handover
 
-### D1. Split the docs along the new seam (sonnet) — code
+### D1. Split the docs along the new seam (sonnet) — code — **done**
 
 - **Touches:** `README.md` (448 lines: `## Experiment log` 27, `## Starting a new system` 161,
   `## Layout` 437), `CLAUDE.md` (77 lines), new `docs/agents.md`, new `docs/lab-repo-README.md` (a draft for
@@ -603,7 +703,7 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    other side), that `md-simulations` is the package other projects import, and that `simulations` holds the
    configs, job scripts and the beamtime store.
 
-### S3. The split script, for the user to run (sonnet + review) — code
+### S3. The split script, for the user to run (sonnet + review) — code — **done**
 
 - **Touches:** new `scripts/split-lab-repo.sh`, new `docs/split-runbook.md`.
 - **Read:** `../claude-instructions/{workspace,data,git}.md`; this plan's Decisions 2 and 3 and Finding 7;
@@ -616,15 +716,17 @@ This is the ticket the user asked for: each of the package's two uses pays only 
   order: clones `md-simulations` to `<parent>/simulations`, removes `src/ tests/ examples/ docs/ uv.lock` there,
   replaces `pyproject.toml` with `docs/lab-repo-pyproject.toml` from P2 and commits, writes a new
   `md-workspace.yaml` and a new `sites/hd-gpu-cluster.yaml` there,
-  moves the untracked `beamtime/` store across, replaces `data/` with a symlink to
-  `/remote/gpu04/hummerich/data`, installs `docs/lab-repo-mcp.json` (C3) as `.mcp.json`, copies the three trivial
+  installs `docs/lab-repo-mcp.json` (C3) as `.mcp.json`, copies the three trivial
   slurm scripts that are worth keeping as new template examples and deletes the other 14 trivial ones, and
-  leaves the 13 orchestration scripts in place. It never touches the `md-simulations` checkout.
+  leaves the 13 orchestration scripts in place; last, it *moves* the untracked `beamtime/` store and the
+  contents of `data/` into the clone (Decision 24). Apart from those two moves it never touches the
+  `md-simulations` checkout.
 - **Risks:** the clone picking up the *working tree* rather than `main` → clone from the path with an explicit
   `--branch main` and warn on uncommitted changes; the untracked `beamtime/` store being copied instead of
-  moved and then diverging → move it, and fail loudly if the destination exists; `data/` being a real
-  directory with bytes in it (Finding 8) → the script must refuse to replace a non-empty `data/` with a
-  symlink and tell the user to move the contents first; the new repo having no remote → the runbook says the
+  moved and then diverging → move it, and fail loudly if the destination exists; `data/` (589 GB,
+  Finding 8) → moved, not copied, only on one filesystem, with every top-level entry assigned to the lab
+  or the shared root by variable, and an error note that lists the undo of each move done so far so a
+  failure between the two big moves cannot lead to an `rm -rf` of the only copy; the new repo having no remote → the runbook says the
   user creates the GitHub repo and pushes, the script only prints the commands.
 - **Stop if:** the script would need to write anything inside `md-simulations` — that is S4's job, after the
   user confirms the clone exists.
@@ -635,7 +737,8 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 
 1. Shell, `set -euo pipefail`, `SPLIT_PARENT` defaulting to `/remote/gpu04/hummerich/projects`.
 2. Preconditions: `md-simulations` has no uncommitted changes outside the ignored set; `<parent>/simulations`
-   does not exist; `/remote/gpu04/hummerich/data` exists.
+   does not exist; every entry of `data/` is assigned; `md-simulations/data`, `beamtime/` and the target
+   share a filesystem; the shared root exists only if something is sent to it.
 3. Each destructive step is echoed before it runs and skipped under `--dry-run`.
 4. Copy `docs/lab-repo-pyproject.toml` (P2) in as the lab repo's `pyproject.toml`; the runbook tells the
    user to run `uv lock && uv sync` there afterwards, outside Claude Code.
@@ -644,7 +747,7 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 6. Templates: keep `ala2-amber14-implicit-330K.sh` (plain single run), `cln-cgschnet-330K.sh` (cgschnet) and
    `trpcage-amber14-implicit-seeded-330K.sh` (a run with extra setup) as new `*.sh.example` template files in the lab repo.
 
-### S4. Delete the lab half from the package (sonnet + review) — code
+### S4. Delete the lab half from the package (sonnet + review) — code — **done**
 
 - **Touches:** `configs/` (82 files removed), `slurm/` (30 scripts removed), `.mcp.json` (removed),
   `data/README.md` (removed), `.gitignore` (the `data/*`, `beamtime/`, `slurm/output/`, `configs/generated/`
@@ -673,13 +776,14 @@ This is the irreversible half, and it runs only after the user confirms the clon
 exists in `simulations` with its full history.
 
 1. Verify the sibling repo first, as the Risks line requires.
-2. `git rm -r configs slurm .mcp.json data`.
+2. `git rm -r configs slurm data` for the tracked trees, then `rm -f .mcp.json` — it is
+   git-ignored and untracked, so `git rm` would fail and delete nothing (Decision 23).
 3. `.gitignore`: remove the `data/*`, `!data/README.md`, `output/`, `slurm/output/`, `beamtime/` and
    `configs/generated/` rules. Keep the trajectory extensions (examples and tests still produce them), the
    Python and tooling caches, `core.[0-9]*` and `=*`.
 4. README and CLAUDE.md: point at the `simulations` repo for configs, job scripts and the run log.
 
-### D2. Agent instructions for the lab repo (sonnet) — code
+### D2. Agent instructions for the lab repo (sonnet) — code — **done**
 
 - **Touches:** new `docs/lab-repo-CLAUDE.md`, `docs/lab-repo-README.md` (from D1),
   new `docs/lab-repo-job-skill.md`.

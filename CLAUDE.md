@@ -10,7 +10,8 @@ overrides for this project:
 - The `cgschnet` extras depend on **plain `mlcg`** and leave the CUDA line to the
   top-level project; `mlcg[cu130]` (torch 2.11 + the CUDA-13 wheel indexes) is the
   separate, orthogonal `cu130` extra. Locally that means
-  `uv sync --extra cgschnet --extra cu130 --torch-backend=cu130`; a consumer pinning
+  `uv sync --extra cgschnet --extra cu130` (the extra pins the CUDA-13 wheel indexes,
+  so no `--torch-backend` flag is needed -- and `uv sync` does not accept one); a consumer pinning
   its own torch (e.g. split-flows at torch 2.9.1/cu128) takes `cgschnet` alone. Never
   put `mlcg[cu130]` back into a `cgschnet*` extra — that coupling is what forced
   split-flows into a second venv.
@@ -49,6 +50,22 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   their own module boundary, so their force conversion is derived rather than
   hand-written
 - Torch imports stay out of the eager import path (see `torch_potentials/__init__.py`)
+- So do openmm and beamtime: `import md_simulations` (and `md_simulations.torch_potentials`,
+  `config`, `workspace`, `preflight`, `cli`) imports none of `openmm`, `beamtime`, `tqdm`, `mdtraj`,
+  `torch`, `ase`. `md_simulations.engines` and the openmm/beamtime-backed names of
+  `md_simulations.core` are the `simulate`-extra half and raise `ModuleNotFoundError` naming that
+  extra (`EXTRA_HINT`); import them inside the function that needs them, never at module scope in
+  the core layer. `core/__init__` resolves its names lazily (`_LAZY` + `__getattr__`, like
+  `torch_potentials`), so the numpy-only submodules (`core.forces`, `core.replica_exchange`,
+  `core.logging`) import without openmm: `prep/migrate_forces.py` and `prep/cgschnet_dataset.py`
+  depend on that. A new `core` name goes into both `__all__` and `_LAZY`. `core.freezing`,
+  `integrators`, `equilibration`, `reporters`, `runner`, `summary`, `remd` and `tracking` need openmm
+  (or beamtime/tqdm). `tests/test_packaging.py` pins this.
+- **Extras**: `[project.dependencies]` is `numpy`, `pydantic`, `pyyaml` and nothing else. `simulate`
+  (openmm, mdtraj, beamtime, tqdm) is the MD half; `torch-potentials` (torch, ase, mdtraj) has no
+  openmm and no beamtime; `openmm-potentials` is both; `prep`, `analysis`, `viz` and `mcp` carry what
+  their modules import. A new third-party import goes into the extra of the module that makes it,
+  never back into `dependencies`. Tests need `simulate`: `uv sync --extra simulate`.
 
 ## Project shape
 
@@ -62,6 +79,33 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
 - `src/md_simulations/engines/` — one module per force field / engine, each an `Engine`
   subclass building `(topology, system, positions)`.
 - `src/md_simulations/config/` — typed pydantic config models loaded from YAML.
+- `src/md_simulations/workspace.py` — `md-workspace.yaml` (`Workspace`) and its site profile
+  `sites/<site>.yaml` (`Site`): where configs, data and the run store live and which cluster this is.
+  Nothing else in `src/` may name a partition, a venv path or a data directory. Exported from
+  `md_simulations.workspace`, not from `config`.
+- `src/md_simulations/cli/` — the `md-sim` noun/verb dispatcher. `main.py` parses `run` and `check-job`
+  itself and routes the `config` group to `config_cmds.py` (`schema|validate|describe|ls|new`, a
+  `verb -> (summary, handler)` table, core-only, no alias); `config describe` lists input paths by
+  the field names in its `_INPUT_FIELDS`, so a new path-valued config field is added there; `prep`, `analysis` and `sampling` pass everything after the verb to
+  the standalone script via `_dispatch.py`, whose table holds `module:function` *strings* (a verb's
+  module is imported only when chosen, so help and listings load no torch/openmm) and sets
+  `sys.argv[0]` to `md-sim-<verb>` so usage lines match the alias. `_output.py` is the shared
+  `--json` envelope (`{"ok": true, ...}` / `{"ok": false, "error": {"type", "message"}}`; exit
+  0 ok, 1 failure, 2 usage). The 14 `md-sim-*` entry points in `pyproject.toml` stay as aliases of
+  the same mains, and `tests/test_cli.py` pins them against the dispatch table. A new script gets
+  an alias, a `GROUPS` entry and a `SUMMARIES` line.
+- `src/md_simulations/preflight.py` — `md-sim check-job`: `parse_script` reads `#SBATCH` and
+  `md-sim run` out of a shell script, `check_job` checks them against the workspace, site and configs.
+  Core-only imports. An undeterminable fact is `skipped`, never a pass.
+- `src/md_simulations/mcp_server.py` — `md-sim mcp`: six read-and-author tools (`list_configs`,
+  `describe_config`, `validate_config`, `config_schema`, `new_config`, `check_job`) that run the
+  matching `md-sim ... --json` command in-process (`run_cli`, stdout captured under `_INVOKE_LOCK`,
+  since the SDK runs a sync tool in a worker thread) and return its envelope
+  plus `"workspace"`, so the CLI stays the one surface. Core-only imports; the `mcp` SDK (the `mcp`
+  extra) is imported inside `build_server`, and its absence is `McpUnavailable` (exit 1). A new tool
+  is a `make_tools` entry plus a `TOOL_DESCRIPTIONS` line; never one that runs or submits a job.
+  `new_config` refuses any output outside `config_dir`. The lab repo installs its own git-ignored
+  `.mcp.json` that starts this server beside the beamtime one.
 - `src/md_simulations/torch_potentials/` — differentiable torch potentials built from
   a config (`torch-potentials` extra). `bridge`/`potential`/`batch` need torch;
   `build`/`interop`/`calculators` do not, and the package `__init__` resolves the
@@ -72,6 +116,15 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `PotentialLike` class in `cgschnet.py`, dispatched from `build_potential`, and still
   touches neither `Potential` nor `bridge`. It imports torch only — mlcg arrives via
   `torch.load` at build time, so the module stays importable without the extra.
-- `configs/*.yaml` — one versioned config per simulated system.
-- Simulation *data* lives outside the repo under a configurable data root
-  (`MD_DATA_ROOT` env var or `--data-root`); never commit trajectories.
+- This repo is the package only: `src/`, `tests/`, `examples/`, `docs/`. The per-system configs,
+  the orchestration slurm scripts, the Beamtime store, `md-workspace.yaml` and `sites/<site>.yaml`
+  live in the sibling `simulations` repo (`../simulations`), which installs this package and keeps the
+  simulation data in its own gitignored `data/` directory (the shared root `/remote/gpu04/hummerich/data`
+  holds only derived datasets). Nothing here may default a data root
+  (precedence is `--data-root` > `MD_DATA_ROOT` > workspace > config) or name a partition, a venv
+  or a data directory. Never commit trajectories.
+- **CLI contract** (`docs/agents.md`): `md-sim` is one discoverable noun/verb command, every
+  command takes `--json` and answers with the `_output.py` envelope, and an agent authors against
+  `md-sim config schema`, verifies with `config validate` and `check-job`, never writes into the
+  data root and never submits a job. A new command keeps that contract and is added to the dispatch
+  table, so `md-sim --help` and `md-sim --json` list it.

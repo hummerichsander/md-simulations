@@ -5,23 +5,6 @@ import math
 from pydantic import BaseModel, Field, model_validator
 
 
-class SlurmConfig(BaseModel):
-    """SLURM batch-job resource request for a simulation.
-
-    Mirrors the ``#SBATCH`` directives used across the original per-system
-    scripts. Only the fields that varied between jobs are exposed.
-    """
-
-    job_name: str
-    partition: str = "a30"
-    gres: str = "gpu:1"
-    time: str = "0-40:00:00"
-    mem: str = "20G"
-    nodes: int = 1
-    nodelist: str | None = None
-    modules: list[str] = Field(default_factory=list)
-
-
 class BeamtimeConfig(BaseModel):
     """Where a simulation is logged below the Beamtime log dir."""
 
@@ -147,7 +130,6 @@ class _Common(BaseModel):
 
     replica_exchange: ReplicaExchangeConfig | None = None
 
-    slurm: SlurmConfig | None = None
     beamtime: BeamtimeConfig = Field(default_factory=BeamtimeConfig)
 
     # Engines that drive their own integration cannot run through the OpenMM replica-exchange driver.

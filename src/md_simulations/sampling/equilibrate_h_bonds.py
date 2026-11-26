@@ -327,8 +327,9 @@ def shard_bounds(
     and only contiguous blocks concatenate in shard order into the *input's* frame order. That
     order is what every per-frame array derived from the same trajectory -- energies, scores,
     held-out frame indices -- is indexed by, so a strided split would silently permute the dataset
-    against all of them. (``slurm/resample-h-bonds.sh``'s sibling for *relaxation* sharded by
-    stride, which was safe only because its output was never re-indexed against the input.)
+    against all of them. (The lab repo's ``slurm/resample-h-bonds.sh`` has a sibling for
+    *relaxation* that sharded by stride, which was safe only because its output was never
+    re-indexed against the input.)
 
     The blocks differ by at most one frame, and the last one absorbs the remainder.
 

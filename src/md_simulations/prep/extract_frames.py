@@ -13,7 +13,7 @@ bit-identical to the source frame.
 Usage::
 
     md-sim-extract-frames --trajectory traj.trr --topology top.pdb \\
-        --frames 0 1 2 3 4 5 -o data/pdbs/cln-rep
+        --frames 0 1 2 3 4 5 -o <data-root>/pdbs/<system>-rep
 """
 
 import argparse

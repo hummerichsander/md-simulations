@@ -1,9 +1,4 @@
-# Simulation data and outputs — never committed (but keep the data/ README).
-data/*
-!data/README.md
-output/
-slurm/output/
-beamtime/
+# Trajectories and run output -- never committed (tests and examples still produce them).
 *.dcd
 *.xtc
 *.trr
@@ -34,21 +29,22 @@ __pycache__/
 core.[0-9]*
 =*
 
+# Stray run output. Nothing in this repo is a workspace any more -- the configs, the
+# data and the run store live in the sibling `simulations` repo -- but an `md-sim run`
+# started here still falls back to the git root for beamtime's store, and
+# `md-sim-umbrella` defaults its --output-dir to `output`.
+beamtime/
+output/
+
 # Environment
 .env
 
-# Generated reference frames for the examples. `examples/*/data/` is not covered by the
-# `data/*` rule above, which is anchored to the repo root. The frames are trajectory data
-# (5 MB and up) and every example ships the script that rebuilds them, so only the small
-# inputs -- topologies and starting structures -- are tracked.
+# Generated reference frames for the examples. The frames are trajectory data (5 MB and up)
+# and every example ships the script that rebuilds them, so only the small inputs --
+# topologies and starting structures -- are tracked.
 examples/*/data/*.npy
 examples/*/data/*.dcd
 examples/*/data/*.trr
-
-# Per-system configs rendered from a template by the slurm dispatchers (e.g.
-# equilibrate-h-bonds-alaX.sh expanding alaX-amber14-implicit-unconstrained-330K.yaml). They must
-# outlive the dispatcher because the array job reads the path later, but they are reproducible.
-configs/generated/
 
 # Editor directories, and the empty placeholders the sandbox bind-mounts over the
 # shell dotfiles it hides from $HOME. Neither is part of the project; the mounts

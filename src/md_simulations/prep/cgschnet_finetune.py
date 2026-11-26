@@ -159,7 +159,9 @@ def main() -> None:
     parser.add_argument(
         "--model-file", required=True, type=Path, help="Re-exported CGSchNet checkpoint."
     )
-    parser.add_argument("--metaset", default="trpcage", help="Metaset (outer group) name.")
+    parser.add_argument(
+        "--metaset", required=True, help="Metaset (outer group) name, e.g. the molecule."
+    )
     parser.add_argument(
         "--names",
         nargs="*",
