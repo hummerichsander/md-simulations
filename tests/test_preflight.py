@@ -370,6 +370,25 @@ def test_dynamic_data_root_export_skips_inputs(tmp_path: Path) -> None:
     assert _by_name(check_job(_script(tmp_path, body), ws))["inputs"].status == "skipped"
 
 
+def test_dynamic_run_data_root_keeps_the_config_check(tmp_path: Path) -> None:
+    """A run-time ``--data-root`` skips only the inputs check; the config path is still checked.
+
+    :param tmp_path: Pytest temporary directory.
+    :return: None."""
+    ws = _make(tmp_path, site={"partitions": ["a30"]})
+    body = "md-sim run configs/nope.yaml --data-root $D\n"
+    checks = _by_name(check_job(_script(tmp_path, body), ws))
+    assert checks["config"].status == "fail"
+    assert "configs/nope.yaml" in checks["config"].detail
+    assert checks["inputs"].status == "skipped"
+    body = "md-sim run configs/x.yaml --data-root $D\n"
+    checks = _by_name(check_job(_script(tmp_path, body), ws))
+    assert checks["config"].status == "ok"
+    assert checks["inputs"].status == "skipped"
+    checks = _by_name(check_job(_script(tmp_path, body), ws, data_root=str(tmp_path / "data")))
+    assert checks["inputs"].status == "ok"
+
+
 def test_output_directory(tmp_path: Path) -> None:
     """A missing --output directory warns (slurm does not create it); an uncreatable one fails.
 

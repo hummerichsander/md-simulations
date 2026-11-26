@@ -86,11 +86,13 @@ class RunInvocation:
 
     :param config: The config path as written, or ``None`` when it is not statically determinable.
     :param data_root: The command's own ``--data-root`` value, if it has a static one.
-    :param line: The 1-based line number of the command."""
+    :param line: The 1-based line number of the command.
+    :param data_root_dynamic: Whether the command passes a ``--data-root`` built at run time."""
 
     config: str | None
     data_root: str | None
     line: int
+    data_root_dynamic: bool = False
 
 
 @dataclass
@@ -208,10 +210,9 @@ def _invocation(args: list[str], line: int) -> RunInvocation | None:
         elif not positional:
             positional = True
             config = tok if _is_static(tok) else None
-    if dynamic_root:
-        # A data root we cannot read makes every path under it unknowable.
-        config = None
-    return RunInvocation(config=config, data_root=data_root, line=line)
+    return RunInvocation(
+        config=config, data_root=data_root, line=line, data_root_dynamic=dynamic_root
+    )
 
 
 def _logical_lines(text: str) -> list[tuple[int, str]]:
@@ -400,6 +401,8 @@ def _data_root(
     :param workspace: The workspace.
     :param data_root: The ``--data-root`` given to ``check-job``.
     :return: The absolute root (``None`` if undeterminable) and a short description of why."""
+    if run.data_root_dynamic and not data_root:
+        return None, "the command passes a --data-root built at run time"
     explicit = run.data_root or data_root or facts.data_root_export
     if explicit is None and facts.data_root_dynamic:
         return None, "the script sets MD_DATA_ROOT at run time"

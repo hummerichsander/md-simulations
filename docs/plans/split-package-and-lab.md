@@ -198,6 +198,14 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    the hand-written script, not in the description of a physical system. The scripts move to the lab repo in
    S3 self-contained; nothing there reads a config for queue parameters.
 
+18. **A job's need for a GPU is declared, not inferred** (settled in W3's review, amending Decision 4):
+   no config model has a `platform` field, so `check-job` cannot read "this job needs a GPU" out of the
+   config. `md-sim check-job --require-gpu` makes the author or the agent writing the script state it;
+   without the flag the `gres` check is `ok` when a GPU is requested and `skipped` otherwise, never a
+   fail. Decision 4's `platform: CUDA` line stands as the motivating mistake, not as a description of how
+   the check works. C3's `check_job` MCP tool therefore takes an optional `require_gpu` argument
+   alongside the script path.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
@@ -490,7 +498,8 @@ see the same answers, and anything the CLI learns later the server gets for free
 1. `mcp_server.py`: build the server with the official `mcp` Python SDK, stdio transport, server name
    `md-simulations`. Import the SDK inside `serve()`, not at module scope.
 2. One handler per tool, each calling the C2 function and returning its dict unchanged. `check_job` takes
-   an absolute or workspace-relative script path and returns `{"ok", "checks"}` from W3.
+   an absolute or workspace-relative script path and an optional `require_gpu` (Decision 18) and returns
+   `{"ok", "checks"}` from W3.
 3. The workspace is resolved once at startup from `$MD_WORKSPACE` or the cwd, and reported by every tool's
    result as `"workspace"`, so an agent can see which tree it is talking about.
 4. `md-sim mcp [--workspace P]` in `src/md_simulations/cli/main.py`, importing `mcp_server` lazily.
