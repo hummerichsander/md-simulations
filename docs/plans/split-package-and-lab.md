@@ -206,6 +206,19 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    the check works. C3's `check_job` MCP tool therefore takes an optional `require_gpu` argument
    alongside the script path.
 
+19. **`md_simulations.core` resolves its names lazily, so the numpy-only ones stay reachable**
+   (settled in P1's review): P1 wrapped `core/__init__`'s eager imports in a `simulate`-extra hint, which
+   is right for `setup_logger`/`start_run`, but the package `__init__` runs on any submodule import, so
+   `md_simulations.core.forces` — numpy only — is unimportable without openmm. That was already true
+   before P1 (the eager imports pulled openmm all the same); P1 only made the message clearer. It blocks
+   P2's layering: `prep/migrate_forces.py` is numpy plus `core.forces`, and
+   `prep/cgschnet_dataset.py` is mdtraj plus `core.forces`, so the `prep` and `cgschnet-dataset` extras
+   as drawn in P2 step 6 would resolve to a package their modules cannot import. The fix is the
+   `_LAZY`/`__getattr__` pattern of `torch_potentials/__init__.py` applied to `core/__init__`: the
+   openmm/beamtime-backed names resolve on first access with `EXTRA_HINT`, while
+   `md_simulations.core.forces` imports on a core install. Rejected: adding `md-simulations[simulate]`
+   to `prep`, which puts openmm back under a dataset-preparation extra and contradicts Decision 9.
+
 ## S. Split and fixtures
 
 ### S1. Free the package suite from `configs/` and `data/` (sonnet) — code — **done**
@@ -552,8 +565,10 @@ down. Until this ticket lands, no arrangement of extras can produce a slim insta
 ### P2. Re-layer the dependencies (sonnet + review) — code
 
 - **Touches:** `pyproject.toml` (`dependencies` 16–28, `[project.optional-dependencies]` 30–120,
-  `[tool.uv]` 146–180), new `docs/lab-repo-pyproject.toml`, `README.md` (install section), `CLAUDE.md`.
-- **Read:** this plan's Findings 9–11 and Decisions 9–12; `pyproject.toml`'s existing comments on the
+  `[tool.uv]` 146–180), new `docs/lab-repo-pyproject.toml`, `README.md` (install section), `CLAUDE.md`,
+  `src/md_simulations/core/__init__.py` (the lazy resolution of Decision 19), `tests/test_packaging.py`.
+- **Read:** this plan's Findings 9–11 and Decisions 9–12 and 19; `src/md_simulations/torch_potentials/__init__.py`
+  (`_LAZY` and `__getattr__`, the pattern step 10 copies); `pyproject.toml`'s existing comments on the
   `cgschnet`/`cu130` separation — that reasoning is unchanged and must survive the edit.
 - **Check:** `.venv/bin/python -c "import tomllib,pathlib;
   tomllib.loads(pathlib.Path('pyproject.toml').read_text())"`; then **the user runs `uv lock` outside
@@ -563,7 +578,10 @@ down. Until this ticket lands, no arrangement of extras can produce a slim insta
   appear nowhere; `simulate`, `torch-potentials`, `openmm-potentials`, `mcp`, `analysis` and `prep` carry what
   their modules actually import, including the previously undeclared `networkx`, `matplotlib` and
   `scienceplots`; `all` still resolves; `uv lock` succeeds and `uv.lock` is committed in the same commit;
-  `docs/lab-repo-pyproject.toml` is a complete, ready-to-copy project file for the `simulations` repo.
+  `docs/lab-repo-pyproject.toml` is a complete, ready-to-copy project file for the `simulations` repo;
+  and, per Decision 19, `import md_simulations.core.forces` succeeds with openmm unimportable while
+  `from md_simulations.core import setup_logger` still raises `EXTRA_HINT` (both asserted in
+  `tests/test_packaging.py`, extending `test_engines_without_openmm_names_the_simulate_extra`).
 - **Risks:** an extra silently losing a dependency it used to get from core → audit every subpackage's
   third-party imports against its extra before committing; `mdtraj`, imported only inside
   `src/md_simulations/torch_potentials/cgschnet.py:275`, belongs in `torch-potentials` too, not only in `simulate`;
@@ -594,6 +612,13 @@ This is the ticket the user asked for: each of the package's two uses pays only 
    index blocks per Decision 12.
 9. README install section: four lines — the wrapper (`md-simulations[torch-potentials]`), the wrapper on
    OpenMM configs (`[openmm-potentials]`), running simulations (`[simulate]`) and the agent server (`[mcp]`).
+10. `src/md_simulations/core/__init__.py`: replace P1's `try`/`except` around the eager imports with the
+   `_LAZY` + `__getattr__` pattern of `torch_potentials/__init__.py`, keeping `EXTRA_HINT` and its
+   wording. Every re-exported name is resolved on first access; nothing is imported at module scope, so
+   `md_simulations.core.forces`, `core.freezing` and the other numpy-only submodules import under the
+   `prep` and `cgschnet-dataset` extras. Audit the remaining `from md_simulations.core...` importers
+   (`prep/migrate_forces.py`, `prep/cgschnet_dataset.py`, `sampling/umbrella.py`) against the extra each
+   one belongs to; `umbrella.py` is `simulate`-side and may keep needing openmm.
 
 ## D. Documentation and handover
 
