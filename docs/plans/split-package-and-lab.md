@@ -16,7 +16,7 @@ marked `+ review` with `/review-ticket docs/plans/split-package-and-lab.md <ID>`
 - **Done means:** `md-simulations` is a package repo only — `src/`, `tests/`, `examples/`, `docs/` — that
   clones, installs and tests green on a machine with no data root and no cluster. A sibling repo
   `/remote/gpu04/hummerich/projects/simulations` holds `configs/`, the orchestration slurm scripts, the
-  beamtime store, the `data/` symlink, `md-workspace.yaml` and `sites/`. The package no longer contains any
+  beamtime store, the git-ignored `data/` directory (the simulation data, moved there), `md-workspace.yaml` and `sites/`. The package no longer contains any
   knowledge of this cluster: no partition defaults, no `.venv/bin/activate`, no `$PWD/data`. Its two uses
   are separately installable: the package alone pulls three dependencies (`numpy`, `pydantic`, `pyyaml`),
   `[torch-potentials]` adds torch and ASE without openmm or beamtime, and `[simulate]` adds the MD stack;
@@ -54,7 +54,7 @@ Evidence: **reproduced** (run), **real data** (seen in the user's data), **code*
 | 9 | `import md_simulations` eagerly imports openmm, beamtime and tqdm, so no slim install is possible whatever the extras say | the lazy-torch design in `src/md_simulations/torch_potentials/__init__.py` is defeated one level down: `src/md_simulations/torch_potentials/build.py:41` imports `md_simulations.engines` at module scope, and `src/md_simulations/cli.py:7` does the same | reproduced (`import md_simulations`, then inspect `sys.modules`) | P1 |
 | 10 | `parmed>=4.3.1` is a runtime dependency with zero imports anywhere, and `ipykernel>=7.3.0` — a notebook convenience pulling pyzmq, jupyter-client, debugpy and traitlets — sits in the same list | dependencies accumulated while the repo was also the simulation directory | reproduced (`rg -n 'parmed' src/ tests/ examples/` → nothing) | P2 |
 | 11 | `networkx` (`prep/olives.py`) and `matplotlib`/`scienceplots` (imported by `analysis/{tica,cvs,basins}.py`) are imported but declared by no extra; they resolve only because something else drags them in | `analysis` declares `deeptime`/`scipy` only; `viz` is a separate opt-in | reproduced | P2 |
-| 8 | `data/` is a real directory here, not the symlink to `/remote/gpu04/hummerich/data` that `claude-instructions/data.md` mandates | predates the convention | reproduced (`ls -la data`) | S3 |
+| 8 | `data/` is a real directory here (589 GB: `ala2 alaX cln models pdbs trp-cage`), and the shared root's `cgschnet-data` symlinks into it | the simulation data was always kept in the repo; the shared root holds only derived datasets (Decision 24) | reproduced (`ls -la data`, `du -sh`) | S3 |
 
 ## Brief
 
@@ -180,8 +180,9 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    has no Slurm client, and a 40-hour GPU job is not something an agent starts unattended. The agent
    authors, validates and checks; the user submits. Rejected: a `run` tool for "short" jobs, since short
    is not checkable from the config alone.
-15. **The data root stays outside both repos** at `/remote/gpu04/hummerich/data`, reached from the lab repo by
-   a gitignored `data/` symlink per `claude-instructions/data.md`. The package never defaults a data root.
+15. **The package never defaults a data root**; the lab repo's data root is its own `data/` (amended by
+   Decision 24 — the original wording, "outside both repos at `/remote/gpu04/hummerich/data`, reached
+   by a `data/` symlink", is superseded).
 
 16. **`md-workspace.yaml` discovery is the package's own, not beamtime's** (settled in W1's review, from W1's
    "Stop if"): `beamtime.sdk.paths.find_root` finds a `beamtime.yaml` (or the git root) for the run store and
@@ -250,6 +251,19 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    plain `rm -f .mcp.json`. On the lab side the same fact means `docs/lab-repo-mcp.json` is written into
    the clone as an untracked, ignored file (S3 step 5) and is never committed there either; each
    checkout's `.mcp.json` is local.
+
+24. **The simulation data moves into the lab repo's gitignored `data/`; it does not go to the shared
+   root** (the user's decision, after S3's first version): `/remote/gpu04/hummerich/data` holds only
+   *derived* datasets, each with a `datacard.yaml`, and `md-simulations/data/` is raw run output plus
+   its inputs and trained models. S3 therefore *moves* (a rename on one filesystem, never a copy)
+   `md-simulations/data/*` into the clone's `data/`, as its last step beside the beamtime move;
+   `md-workspace.yaml` keeps `data_root: ${MD_DATA_ROOT:-./data}`, which now resolves to that real
+   directory. Which top-level directories go to the lab and which, if any, to the shared root is a
+   parameter of the script (`SPLIT_DATA_LAB`, `SPLIT_DATA_SHARED`), defaulting to everything in the lab
+   repo; the user confirms it. The shared root's `cgschnet-data` symlink (split-flows-energetics reads
+   `models/` and `pdbs/` through it) is re-pointed at the lab repo's `data/` by the user, and the
+   package's data-root rule is unchanged. Rejected: the symlink design (Decision 15's first wording),
+   which put 589 GB of non-derived data in a root with a datacard rule it cannot meet.
 
 ## S. Split and fixtures
 
@@ -702,15 +716,17 @@ This is the ticket the user asked for: each of the package's two uses pays only 
   order: clones `md-simulations` to `<parent>/simulations`, removes `src/ tests/ examples/ docs/ uv.lock` there,
   replaces `pyproject.toml` with `docs/lab-repo-pyproject.toml` from P2 and commits, writes a new
   `md-workspace.yaml` and a new `sites/hd-gpu-cluster.yaml` there,
-  moves the untracked `beamtime/` store across, replaces `data/` with a symlink to
-  `/remote/gpu04/hummerich/data`, installs `docs/lab-repo-mcp.json` (C3) as `.mcp.json`, copies the three trivial
+  installs `docs/lab-repo-mcp.json` (C3) as `.mcp.json`, copies the three trivial
   slurm scripts that are worth keeping as new template examples and deletes the other 14 trivial ones, and
-  leaves the 13 orchestration scripts in place. It never touches the `md-simulations` checkout.
+  leaves the 13 orchestration scripts in place; last, it *moves* the untracked `beamtime/` store and the
+  contents of `data/` into the clone (Decision 24). Apart from those two moves it never touches the
+  `md-simulations` checkout.
 - **Risks:** the clone picking up the *working tree* rather than `main` → clone from the path with an explicit
   `--branch main` and warn on uncommitted changes; the untracked `beamtime/` store being copied instead of
-  moved and then diverging → move it, and fail loudly if the destination exists; `data/` being a real
-  directory with bytes in it (Finding 8) → the script must refuse to replace a non-empty `data/` with a
-  symlink and tell the user to move the contents first; the new repo having no remote → the runbook says the
+  moved and then diverging → move it, and fail loudly if the destination exists; `data/` (589 GB,
+  Finding 8) → moved, not copied, only on one filesystem, with every top-level entry assigned to the lab
+  or the shared root by variable, and an error note that lists the undo of each move done so far so a
+  failure between the two big moves cannot lead to an `rm -rf` of the only copy; the new repo having no remote → the runbook says the
   user creates the GitHub repo and pushes, the script only prints the commands.
 - **Stop if:** the script would need to write anything inside `md-simulations` — that is S4's job, after the
   user confirms the clone exists.
@@ -721,7 +737,8 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 
 1. Shell, `set -euo pipefail`, `SPLIT_PARENT` defaulting to `/remote/gpu04/hummerich/projects`.
 2. Preconditions: `md-simulations` has no uncommitted changes outside the ignored set; `<parent>/simulations`
-   does not exist; `/remote/gpu04/hummerich/data` exists.
+   does not exist; every entry of `data/` is assigned; `md-simulations/data`, `beamtime/` and the target
+   share a filesystem; the shared root exists only if something is sent to it.
 3. Each destructive step is echoed before it runs and skipped under `--dry-run`.
 4. Copy `docs/lab-repo-pyproject.toml` (P2) in as the lab repo's `pyproject.toml`; the runbook tells the
    user to run `uv lock && uv sync` there afterwards, outside Claude Code.

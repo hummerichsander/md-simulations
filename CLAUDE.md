@@ -117,8 +117,9 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   `torch.load` at build time, so the module stays importable without the extra.
 - This repo is the package only: `src/`, `tests/`, `examples/`, `docs/`. The per-system configs,
   the orchestration slurm scripts, the Beamtime store, `md-workspace.yaml` and `sites/<site>.yaml`
-  live in the sibling `simulations` repo (`../simulations`), which installs this package and reaches
-  the shared data root through a gitignored `data/` symlink. Nothing here may default a data root
+  live in the sibling `simulations` repo (`../simulations`), which installs this package and keeps the
+  simulation data in its own gitignored `data/` directory (the shared root `/remote/gpu04/hummerich/data`
+  holds only derived datasets). Nothing here may default a data root
   (precedence is `--data-root` > `MD_DATA_ROOT` > workspace > config) or name a partition, a venv
   or a data directory. Never commit trajectories.
 - **CLI contract** (`docs/agents.md`): `md-sim` is one discoverable noun/verb command, every

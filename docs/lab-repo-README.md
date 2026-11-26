@@ -24,7 +24,7 @@ md-workspace.yaml     the workspace descriptor: config_dir, data_root, run_store
 sites/                one profile per cluster: partitions, venv activation, slurm output, modules
 configs/              one YAML per system, plus templates/ and mdp/
 slurm/                hand-written batch scripts; output/ holds job logs
-data/                 symlink to the shared data root /remote/gpu04/hummerich/data (git-ignored)
+data/                 the simulation data: run outputs, inputs, trained models (git-ignored, README.md tracked)
 beamtime/             experiment log (git-ignored; see beamtime.yaml)
 ```
 
@@ -37,7 +37,7 @@ Every `md-sim run` is also logged with [Beamtime](https://hummerichsander.github
 into `beamtime/` at the workspace root (set in `beamtime.yaml`; the logs are not committed). A
 run records the config, the absolute output directory, energies, temperature and speed every
 `report_interval` steps (potential energy and RMS force per saved frame for `cgschnet`), the
-console output, and references to the output files, which stay on the data root. Logs are
+console output, and references to the output files, which stay under `data/`. Logs are
 grouped as systems, simulations and replica sets:
 
 ```
@@ -97,7 +97,7 @@ constrained bonds".
 
 ## For agents
 
-`CLAUDE.md` is this repo's agent entry point: the workspace layout, the read-only data root, and the
+`CLAUDE.md` is this repo's agent entry point: the workspace layout, the read-only `data/`, and the
 rule that the agent prepares and verifies jobs while the user submits. `.claude/skills/write-job/`
 holds the write-a-job-script loop (site profile, nearest template, `md-sim check-job`, hand over).
 The package's `docs/agents.md` is the full contract: enumerate the CLI with `md-sim --help`, author

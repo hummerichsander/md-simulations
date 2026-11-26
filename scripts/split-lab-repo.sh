@@ -3,9 +3,10 @@
 #
 # Clone-then-delete, the pattern claude-instructions/workspace.md records for descriptor-fields:
 # a full clone of one branch (history kept), then the package half is removed from the clone.
-# This script only ever *reads* the md-simulations checkout, with one exception: the last step
-# moves the untracked `beamtime/` run store out of it. The package side is cleaned up afterwards
-# (ticket S4), once you have confirmed the clone.
+# This script only ever *reads* the md-simulations checkout, with one exception: the last two
+# steps MOVE (never copy) the untracked `beamtime/` run store and the contents of the untracked
+# `data/` out of it, into the clone. The package side is cleaned up afterwards (ticket S4), once
+# you have confirmed the clone.
 #
 #   bash scripts/split-lab-repo.sh --dry-run    # print every command, run nothing
 #   bash scripts/split-lab-repo.sh              # do it
@@ -16,7 +17,14 @@
 #   SPLIT_BRANCH      branch of this checkout to clone (default: the branch checked out here).
 #                     It must carry the W2/P2 work (configs without `slurm:` blocks and the
 #                     docs/lab-repo-* drafts); `main` only qualifies once that is merged.
-#   SPLIT_DATA_ROOT   the shared data root the new repo's data/ links to
+#   SPLIT_DATA_LAB    top-level entries of md-simulations/data/ that move into the new repo's own
+#                     git-ignored data/ (default: "ala2 alaX cln models pdbs trp-cage")
+#   SPLIT_DATA_SHARED entries that instead move into the shared data root, with a symlink left in
+#                     the new repo's data/ so config paths still resolve (default: none). Each is
+#                     `name` or `name=target-dir-under-the-root`. The root only holds derived
+#                     datasets, each needing a datacard.yaml that you write afterwards.
+#                     Every entry must be in exactly one of the two lists.
+#   SPLIT_DATA_ROOT   the shared data root, used only for SPLIT_DATA_SHARED
 #                     (default /remote/gpu04/hummerich/data)
 #
 # See docs/split-runbook.md for what to do before and after.
@@ -44,6 +52,8 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPLIT_PARENT="${SPLIT_PARENT:-/remote/gpu04/hummerich/projects}"
 DATA_ROOT="${SPLIT_DATA_ROOT:-/remote/gpu04/hummerich/data}"
 DEST="$SPLIT_PARENT/simulations"
+read -r -a DATA_LAB <<<"${SPLIT_DATA_LAB-ala2 alaX cln models pdbs trp-cage}"
+read -r -a DATA_SHARED <<<"${SPLIT_DATA_SHARED-}"
 GH_OWNER="hummerichsander"
 
 # The 3 trivial scripts kept as templates, and the 14 other trivial scripts (one `md-sim run`
@@ -94,6 +104,26 @@ emit() {
     fi
 }
 
+# Every move out of md-simulations is irreversible once it happens, so remember how to undo each,
+# newest first, for the error note below.
+UNDO=()
+remember_undo() { UNDO=("$1" ${UNDO[@]+"${UNDO[@]}"}); }
+# Move (never copy) a path, and record the command that puts it back.
+move() { # <from> <to>
+    run mv "$1" "$2"
+    remember_undo "$(printf 'mv %q %q' "$2" "$1")"
+}
+
+# The existing ancestor of a path (a mkdir -p target need not exist yet).
+existing_ancestor() {
+    local d="$1"
+    while [ ! -e "$d" ]; do d="$(dirname "$d")"; done
+    printf '%s\n' "$d"
+}
+same_device() { [ "$(stat -c %d "$1")" = "$(stat -c %d "$(existing_ancestor "$2")")" ]; }
+shared_name() { printf '%s\n' "${1%%=*}"; }
+shared_target() { case "$1" in *=*) printf '%s\n' "${1#*=}" ;; *) printf '%s\n' "$1" ;; esac; }
+
 FAILED=0
 precondition() { # <description> <command...>
     local what="$1"
@@ -131,7 +161,8 @@ BRANCH="${SPLIT_BRANCH:-$(git -C "$SRC" symbolic-ref --short -q HEAD || true)}"
 echo "source:       $SRC"
 echo "branch:       ${BRANCH:-<none>}"
 echo "destination:  $DEST"
-echo "data root:    $DATA_ROOT"
+echo "data -> lab:  ${DATA_LAB[*]:-<nothing>}"
+echo "data -> root: ${DATA_SHARED[*]:-<nothing>}${DATA_SHARED[*]:+  (root $DATA_ROOT)}"
 [ "$DRY_RUN" -eq 1 ] && echo "mode:         DRY RUN (nothing is executed)"
 
 say "Preconditions"
@@ -154,24 +185,50 @@ fi
 precondition "md-simulations has no uncommitted or untracked changes (ignored files excepted)" \
     test -z "$(git -C "$SRC" status --porcelain 2>/dev/null)"
 precondition "$DEST does not exist" bash -c '! [ -e "$1" ] && ! [ -L "$1" ]' _ "$DEST"
-precondition "data root $DATA_ROOT is a directory" test -d "$DATA_ROOT"
-precondition "no md-simulations/data/ contents to lose (empty, README.md only, or a symlink)" \
-    bash -c '[ -L "$1/data" ] || [ ! -e "$1/data" ] || \
-             [ -z "$(find "$1/data" -mindepth 1 -maxdepth 1 ! -name README.md ! -name .claude)" ]' _ "$SRC"
+if [ -L "$SRC/data" ]; then
+    precondition "md-simulations/data is a real directory, not a symlink" false
+elif [ -d "$SRC/data" ]; then
+    # Every top-level entry must be assigned, so nothing is left behind or moved by accident.
+    mapfile -t ENTRIES < <(find "$SRC/data" -mindepth 1 -maxdepth 1 ! -name README.md ! -name .claude \
+        -printf '%f\n' | sort)
+    SHARED_NAMES=()
+    for e in ${DATA_SHARED[@]+"${DATA_SHARED[@]}"}; do SHARED_NAMES+=("$(shared_name "$e")"); done
+    for e in "${ENTRIES[@]}"; do
+        in_lab=0 in_shared=0
+        for n in ${DATA_LAB[@]+"${DATA_LAB[@]}"}; do [ "$n" = "$e" ] && in_lab=1; done
+        for n in ${SHARED_NAMES[@]+"${SHARED_NAMES[@]}"}; do [ "$n" = "$e" ] && in_shared=1; done
+        precondition "data/$e is assigned to exactly one of SPLIT_DATA_LAB, SPLIT_DATA_SHARED" \
+            test "$((in_lab + in_shared))" -eq 1
+    done
+    for n in ${DATA_LAB[@]+"${DATA_LAB[@]}"} ${SHARED_NAMES[@]+"${SHARED_NAMES[@]}"}; do
+        precondition "assigned entry data/$n exists" test -e "$SRC/data/$n"
+    done
+    precondition "md-simulations/data and $SPLIT_PARENT are on one filesystem (the moves are renames)" \
+        same_device "$SRC/data" "$SPLIT_PARENT"
+    if [ "${#DATA_SHARED[@]}" -gt 0 ]; then
+        precondition "data root $DATA_ROOT is a directory" test -d "$DATA_ROOT"
+        precondition "md-simulations/data and $DATA_ROOT are on one filesystem" \
+            same_device "$SRC/data" "$DATA_ROOT"
+        for e in "${DATA_SHARED[@]}"; do
+            precondition "shared target '$(shared_target "$e")' is a plain directory name" \
+                bash -c '[[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]' _ "$(shared_target "$e")"
+            precondition "$DATA_ROOT/$(shared_target "$e") does not exist" \
+                bash -c '! [ -e "$1" ] && ! [ -L "$1" ]' _ "$DATA_ROOT/$(shared_target "$e")"
+        done
+    fi
+else
+    echo "  note  $SRC/data does not exist, so no data is moved"
+fi
 if [ -d "$SRC/beamtime" ]; then
     precondition "$DEST/beamtime can be created by the move" bash -c '! [ -e "$1/beamtime" ]' _ "$DEST"
+    precondition "md-simulations/beamtime and $SPLIT_PARENT are on one filesystem" \
+        same_device "$SRC/beamtime" "$SPLIT_PARENT"
 else
     echo "  note  $SRC/beamtime does not exist, so no run store is moved"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
     echo
-    if [ -d "$SRC/data" ] && [ ! -L "$SRC/data" ] &&
-        [ -n "$(find "$SRC/data" -mindepth 1 -maxdepth 1 ! -name README.md ! -name .claude 2>/dev/null)" ]; then
-        echo "md-simulations/data is a real directory with contents. The new repo's data/ is a symlink to"
-        echo "$DATA_ROOT, so move the contents there first (docs/split-runbook.md, 'Before you run'):"
-        find "$SRC/data" -mindepth 1 -maxdepth 1 ! -name README.md ! -name .claude | sort | sed 's/^/    /'
-    fi
     if [ "$DRY_RUN" -eq 1 ]; then
         echo "dry run: $FAILED precondition(s) failed; a real run would stop here. The plan below is"
         echo "what it would do once they pass."
@@ -184,11 +241,17 @@ fi
 on_error() {
     echo >&2
     echo "error: the split stopped part-way. $DEST is incomplete." >&2
-    echo "Recover by hand, in this order:" >&2
-    echo "  1. If $DEST/beamtime exists, the run store was already moved out of md-simulations:" >&2
-    echo "     move it back ('mv $DEST/beamtime $SRC/beamtime') before anything else." >&2
-    echo "  2. Then remove the half-made clone ('rm -rf $DEST') and rerun." >&2
-    echo "Nothing else in md-simulations was touched; beamtime moves in the very last step." >&2
+    if [ "${#UNDO[@]}" -eq 0 ]; then
+        echo "Nothing has been moved out of md-simulations yet (the moves are the last steps), so" >&2
+        echo "'rm -rf $DEST' is safe; then rerun." >&2
+    else
+        echo "These moves already happened. The only copy of that data is now inside $DEST (or the" >&2
+        echo "data root), so do NOT 'rm -rf $DEST' yet. Undo them first, in this order:" >&2
+        printf '    %s\n' "${UNDO[@]}" >&2
+        echo "If the failing step was itself one of these moves, check both ends of it before" >&2
+        echo "running its undo line. Once every line is undone (or you have confirmed the clone" >&2
+        echo "holds everything), 'rm -rf $DEST' is safe and you can rerun." >&2
+    fi
 }
 trap on_error ERR
 
@@ -236,19 +299,7 @@ slurm_output: ./slurm/output
 modules: []
 EOF
 
-say "4. data/ becomes a symlink to the shared data root"
-run git -C "$DEST" rm -r -q --ignore-unmatch data
-run rm -rf "$DEST/data"
-run ln -s "$DATA_ROOT" "$DEST/data"
-# `data/*` ignores a directory's contents, not a symlink named data.
-run sed -i -e '/^data\/\*$/c\/data' -e '/^!data\/README\.md$/d' \
-    -e 's/ (but keep the data\/ README)//' "$DEST/.gitignore"
-if [ "$DRY_RUN" -eq 0 ] && ! grep -qx '/data' "$DEST/.gitignore"; then
-    echo "error: .gitignore edit did not take" >&2
-    exit 1
-fi
-
-say "5. .mcp.json (beamtime server and md-sim mcp, pinned to $DEST)"
+say "4. .mcp.json (beamtime server and md-sim mcp, pinned to $DEST)"
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "+ draft docs/lab-repo-mcp.json > $DEST/.mcp.json"
 else
@@ -260,7 +311,7 @@ if [ "$DEST" != /remote/gpu04/hummerich/projects/simulations ]; then
     echo "        repo lives elsewhere (only expected for a test run)"
 fi
 
-say "6. Template examples, then prune the trivial scripts"
+say "5. Template examples, then prune the trivial scripts"
 for name in "${TEMPLATES[@]}"; do
     run cp "$DEST/slurm/$name.sh" "$DEST/slurm/$name.sh.example"
 done
@@ -273,18 +324,40 @@ run git -C "$DEST" add -A
 run git -C "$DEST" commit --quiet -m "Add the workspace descriptor and site profile; keep three job templates
 
 md-workspace.yaml and sites/hd-gpu-cluster.yaml tell the md-sim CLI where configs, data and the
-run store are. data/ is now the git-ignored symlink to the shared data root. Three trivial job
+run store are. data/ stays the git-ignored directory it was (the data moves in afterwards, not
+through git). Three trivial job
 scripts are kept as slurm/*.sh.example templates and the other 14 one-liners are removed; the 13
 orchestration scripts stay."
 
-say "7. Move the untracked Beamtime run store (last step; the only change to md-simulations)"
+say "6. Move (not copy) the untracked Beamtime run store"
 if [ -d "$SRC/beamtime" ]; then
     # Refuse rather than let mv nest the store as $DEST/beamtime/beamtime.
     if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEST/beamtime" ]; then
         echo "error: $DEST/beamtime already exists; not moving the run store onto it." >&2
         exit 1
     fi
-    run mv "$SRC/beamtime" "$DEST/beamtime"
+    move "$SRC/beamtime" "$DEST/beamtime"
+else
+    echo "(nothing to move)"
+fi
+
+say "7. Move (not copy) the simulation data into $DEST/data (last step; both moves are renames)"
+if [ -d "$SRC/data" ] && [ ! -L "$SRC/data" ]; then
+    run mkdir -p "$DEST/data"
+    for e in ${DATA_LAB[@]+"${DATA_LAB[@]}"}; do
+        if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEST/data/$e" ]; then
+            echo "error: $DEST/data/$e already exists; not moving onto it." >&2
+            exit 1
+        fi
+        move "$SRC/data/$e" "$DEST/data/$e"
+    done
+    for e in ${DATA_SHARED[@]+"${DATA_SHARED[@]}"}; do
+        name="$(shared_name "$e")"
+        target="$DATA_ROOT/$(shared_target "$e")"
+        move "$SRC/data/$name" "$target"
+        run ln -s "$target" "$DEST/data/$name"
+        remember_undo "$(printf 'rm %q' "$DEST/data/$name")"
+    done
 else
     echo "(nothing to move)"
 fi
@@ -293,7 +366,7 @@ say "Done: summary"
 if [ "$DRY_RUN" -eq 0 ]; then
     git -C "$DEST" log --oneline -3
     git -C "$DEST" status --short
-    ls -la "$DEST"
+    ls -la "$DEST" "$DEST/data"
 fi
 
 cat <<EOF
@@ -303,6 +376,10 @@ The clone has no remote. After checking it (docs/split-runbook.md), publish it w
     cd $DEST
     gh repo create $GH_OWNER/simulations --private --source=. --remote=origin
     git push -u origin main
+
+Then re-point $DATA_ROOT/cgschnet-data at $DEST/data (it still targets md-simulations/data):
+
+    ln -sfn $DEST/data $DATA_ROOT/cgschnet-data
 
 and build its environment yourself, outside Claude Code (its sandbox cannot write the uv cache):
 

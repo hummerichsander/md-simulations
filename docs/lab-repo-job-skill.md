@@ -52,8 +52,8 @@ handover; it never ends in a submission. `sbatch` does not exist on gpu04 and is
    Never edit `md-workspace.yaml` or `sites/` to make a check pass. A `skipped` check is a fact the
    script does not state statically, not a pass: state it in the script, or name it in the handover.
 6. **Hand over; do not submit.** Reply with: the script path, the config path, the `check-job` result
-   (including every `skipped`), what you guessed (walltime, memory), whether the run creates a new
-   dataset directory that will need a `datacard.yaml`, and the submit command as a standalone line
+   (including every `skipped`), what you guessed (walltime, memory), whether the run produces a
+   dataset meant for the shared root (that needs a `datacard.yaml`), and the submit command as a standalone line
    for the user to run from a submit node:
 
    ```

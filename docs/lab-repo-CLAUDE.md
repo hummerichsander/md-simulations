@@ -26,7 +26,9 @@ this cluster. Shared conventions come from `../claude-instructions` (loaded via 
 - `slurm/`: hand-written batch scripts; `slurm/output/` holds job logs. `*.sh.example` files are the
   template examples to start from (one per engine family); the other scripts are real campaigns and
   show arrays, chaining and sharding.
-- `data/`: git-ignored symlink to the shared data root `/remote/gpu04/hummerich/data`.
+- `data/` (`data_root`): this repo's own simulation data (run outputs, input structures, trained models),
+  git-ignored apart from its README. It is a real directory, not a link to the shared root
+  `/remote/gpu04/hummerich/data`, which holds only derived datasets.
 - `beamtime/` (`run_store`, set in `beamtime.yaml`): the experiment log, git-ignored. Every `md-sim run`
   logs into it as system group -> simulation run, or replica-set group -> `rNN` runs. It is Beamtime's
   to manage: read it through the beamtime server, never edit it by hand, and do not add a run listing
@@ -52,16 +54,16 @@ this repo are repeated below because they are the ones that cost real data and q
 
 ## Data root
 
-- **The data root is read-only to you.** `/remote/gpu04/hummerich/data` (through `data/`) is the user's
-  shared store. Read inputs from it. Do not create, move, edit or delete anything in it, and do not
+- **The data root is read-only to you.** `data/` is the user's store. Read inputs from it. Do not create, move, edit or delete anything in it, and do not
   point a config's `output_subdir` at an existing run: use a fresh subdirectory name.
 - Outputs land in the data root only because the user's job puts them there. A smoke test you run
   yourself writes to a scratch directory (`--data-root "$TMPDIR/..."`), never the data root.
-- Every dataset directory carries a `datacard.yaml` as specified in
-  `/remote/gpu04/hummerich/data/SCHEMA.md`, and a new dataset is not done until `check-datacards.py`
-  passes (`../claude-instructions/data.md`). You cannot write the card, so when a config or script
-  creates a new dataset directory, say in the handover that it needs a `datacard.yaml` once it exists.
-- Never commit trajectories, checkpoints or data, and never commit `data/` (it is a symlink).
+- Derived datasets that go to the shared root `/remote/gpu04/hummerich/data` carry a `datacard.yaml` as
+  specified in its `SCHEMA.md`, and a dataset there is not done until `check-datacards.py` passes
+  (`../claude-instructions/data.md`). Run outputs under this repo's `data/` need no card. You cannot
+  write a card, so when a job produces a dataset meant for the shared root, say in the handover that
+  it needs a `datacard.yaml` once it exists.
+- Never commit trajectories, checkpoints or data, and never commit `data/` (it is git-ignored).
 
 ## Jobs: you prepare, the user submits
 

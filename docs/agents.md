@@ -41,9 +41,8 @@ follows it authors and verifies; the user runs.
 
 ## 4. Never
 
-- **Never write into the data root.** It is the user's shared store (`/remote/gpu04/hummerich/data`,
-  reached through a `data/` symlink); outputs, trajectories and checkpoints land there and nowhere
-  else is touched. Read inputs from it, and point `output_subdir` at a fresh subdirectory rather
+- **Never write into the data root.** It is the user's store (the lab repo's git-ignored `data/`);
+  outputs, trajectories and checkpoints land there and nowhere else is touched. Read inputs from it, and point `output_subdir` at a fresh subdirectory rather
   than an existing run.
 - **Never submit.** Do not call `sbatch`, and do not start `md-sim run` for anything longer than a
   smoke test. Hand the script to the user with its path and the `check-job` result; they submit it

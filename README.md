@@ -38,7 +38,7 @@ Every run writes the same files to `<data_root>/<output_subdir>/`, regardless of
 | `final_structure.pdb` | last frame, and the restart point for a follow-up run |
 | `simulation_summary.txt` | force field, ensemble, thermostat, timestep, simulated time |
 
-Data lives outside the package and outside any repo that uses it. The data root is set by
+Data never lives in the package; a repo that runs simulations keeps it in its own git-ignored `data/`. The data root is set by
 `--data-root`, `MD_DATA_ROOT`, the workspace descriptor or the config's `data_root`, in that order
 of precedence; nothing defaults it, and a run with none of them exits with an error naming all four.
 Trajectories are never committed.

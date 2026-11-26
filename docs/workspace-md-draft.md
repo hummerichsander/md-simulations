@@ -6,5 +6,5 @@ this paragraph. The user edits that file; a ticket session does not.
   the `md-sim` command and the torch potentials other projects reweight with. It holds no configs,
   job scripts or data. `simulations` holds those: the configs, the hand-written job scripts and the
   Beamtime store, split out of `md-simulations` on 2026-11-26 (a full clone with its history, then
-  each half deleted its other side). It reaches the shared data root through a `data/` symlink and
-  finds its layout through `md-workspace.yaml`.
+  each half deleted its other side). It keeps the simulation data in its own git-ignored `data/` (the shared root
+  holds only derived datasets) and finds its layout through `md-workspace.yaml`.
