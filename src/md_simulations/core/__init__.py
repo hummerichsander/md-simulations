@@ -12,7 +12,7 @@ from typing import Any
 
 # Third-party modules that only the ``simulate`` extra installs. A ModuleNotFoundError
 # for one of these gets the install hint; any other missing module is left untouched.
-_SIMULATE_MODULES = frozenset({"openmm", "beamtime", "tqdm", "mdtraj", "parmed"})
+_SIMULATE_MODULES = frozenset({"openmm", "beamtime", "tqdm", "mdtraj"})
 
 # Same wording as ``md_simulations.engines.EXTRA_HINT``.
 EXTRA_HINT = (

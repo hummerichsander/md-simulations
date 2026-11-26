@@ -7,7 +7,7 @@ from md_simulations.config.base import SimulationConfig
 
 # Third-party modules that only the ``simulate`` extra installs. A ModuleNotFoundError
 # for one of these gets the install hint; any other missing module is left untouched.
-_SIMULATE_MODULES = frozenset({"openmm", "beamtime", "tqdm", "mdtraj", "parmed"})
+_SIMULATE_MODULES = frozenset({"openmm", "beamtime", "tqdm", "mdtraj"})
 
 # Shared with the CLI and mirrored by ``torch_potentials.build.EXTRA_HINT``, so the
 # guidance is identical whichever entry point the user came through.

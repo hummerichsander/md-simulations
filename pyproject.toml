@@ -81,8 +81,9 @@ cu130 = [
 # a torch consumer never does.
 mcp = ["mcp>=2.0,<3"]
 viz = ["matplotlib>=3.8", "scienceplots>=2.2.0"]
-# Trajectory analysis (TICA, CVs, basins, free-energy surfaces). The modules import
-# mdtraj, matplotlib and scienceplots eagerly, so they are declared here.
+# Trajectory analysis (TICA, CVs, basins, free-energy surfaces). The modules import mdtraj,
+# matplotlib and scienceplots (inside the functions that need them), so they are declared here
+# rather than left to arrive with something else.
 analysis = [
     "deeptime>=0.4.4",
     "scipy>=1.11",
@@ -91,8 +92,9 @@ analysis = [
     "scienceplots>=2.2.0",
 ]
 # Trajectory/structure preparation (md_simulations.prep): mdtraj for the frame and
-# mapping tools, networkx for the vendored olives.py. The force-matching dataset tools
-# have their own extra below, and none of this needs openmm.
+# mapping tools, networkx for the vendored olives.py. None of this needs openmm. The
+# CGSchNet-side scripts here (cgschnet_dataset/_finetune/_priors/_reexport) need torch and
+# mlcg on top and are covered by `cgschnet-dataset` below.
 prep = ["mdtraj>=1.10.3", "networkx>=3.0"]
 # Differentiable torch potentials built from a config (see
 # md_simulations.torch_potentials). Deliberately no openmm and no beamtime: ase

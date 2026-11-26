@@ -484,8 +484,9 @@ definition.
   PDBs, i.e. starting structures for new runs: `md-sim-extract-frames --trajectory t.trr
   --topology top.pdb --frames 0 1 2 -o data/pdbs/start`), `martini_cg_map` (CG mapping matrix,
   needs the `martini` extra), `itp_bonds_to_pdb` (CONECT records from an ITP), and the vendored
-  `olives` script. They need the `prep` extra (mdtraj, networkx), not the MD stack. The CGSchNet ones — `cgschnet_map`, `cgschnet_embeddings`,
-  `cgschnet_reexport`, `cgschnet_dataset` — are covered above.
+  `olives` script. They need the `prep` extra (mdtraj, networkx), not the MD stack. The
+  CGSchNet ones — `cgschnet_map`, `cgschnet_embeddings`, `cgschnet_reexport`,
+  `cgschnet_dataset` — are covered above.
 
 ## Layout
 

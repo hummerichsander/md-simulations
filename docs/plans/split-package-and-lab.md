@@ -53,7 +53,7 @@ Evidence: **reproduced** (run), **real data** (seen in the user's data), **code*
 | 7 | The git-level split is far smaller than it looks: `beamtime/` is gitignored and untracked (0 tracked files) and `data/*` is gitignored except the README, so only `configs/`, `slurm/*.sh` and `.mcp.json` actually move in git | `.gitignore:1-7`, `git ls-files beamtime \| wc -l` → 0 | reproduced | S3, S4 |
 | 9 | `import md_simulations` eagerly imports openmm, beamtime and tqdm, so no slim install is possible whatever the extras say | the lazy-torch design in `src/md_simulations/torch_potentials/__init__.py` is defeated one level down: `src/md_simulations/torch_potentials/build.py:41` imports `md_simulations.engines` at module scope, and `src/md_simulations/cli.py:7` does the same | reproduced (`import md_simulations`, then inspect `sys.modules`) | P1 |
 | 10 | `parmed>=4.3.1` is a runtime dependency with zero imports anywhere, and `ipykernel>=7.3.0` — a notebook convenience pulling pyzmq, jupyter-client, debugpy and traitlets — sits in the same list | dependencies accumulated while the repo was also the simulation directory | reproduced (`rg -n 'parmed' src/ tests/ examples/` → nothing) | P2 |
-| 11 | `networkx` (`prep/olives.py`) and `matplotlib`/`scienceplots` (eager in `analysis/{tica,cvs,basins}.py`) are imported but declared by no extra; they resolve only because something else drags them in | `analysis` declares `deeptime`/`scipy` only; `viz` is a separate opt-in | reproduced | P2 |
+| 11 | `networkx` (`prep/olives.py`) and `matplotlib`/`scienceplots` (imported by `analysis/{tica,cvs,basins}.py`) are imported but declared by no extra; they resolve only because something else drags them in | `analysis` declares `deeptime`/`scipy` only; `viz` is a separate opt-in | reproduced | P2 |
 | 8 | `data/` is a real directory here, not the symlink to `/remote/gpu04/hummerich/data` that `claude-instructions/data.md` mandates | predates the convention | reproduced (`ls -la data`) | S3 |
 
 ## Brief
@@ -233,6 +233,15 @@ What's left runs in this order: S1 S2 W1 W2 W3 P1 C1 C2 C3 D1 P2 S3 S4 D2
    workspace" is a misconfiguration, and one startup error in the client's log is easier to act on than
    six tools that each repeat it. Rejected: serving workspace-less, which would add a null state to every
    tool result and let `config_schema` — the one tool needing no workspace — mask the misconfiguration.
+
+22. **The `simulate`-hint assertion is pinned on openmm/beamtime-backed names, not on `setup_logger`**
+   (settled in P2's review, correcting P2's Done line): under Decision 19's lazy resolution
+   `from md_simulations.core import setup_logger` *resolves* on a core install — `core/logging.py` is
+   stdlib-only — so it cannot be the name that "still raises `EXTRA_HINT`". `tests/test_packaging.py`
+   asserts the hint on `create_integrator`, `start_run` and `ReplicaExchange` (openmm-, beamtime- and
+   openmm-backed respectively, both attribute access and `from`-import) and asserts that `setup_logger`
+   and `core.forces` resolve. That is the clause's intent: every name whose module needs the MD stack
+   raises, every name whose module does not resolves.
 
 ## S. Split and fixtures
 
@@ -631,8 +640,10 @@ This is the ticket the user asked for: each of the package's two uses pays only 
 10. `src/md_simulations/core/__init__.py`: replace P1's `try`/`except` around the eager imports with the
    `_LAZY` + `__getattr__` pattern of `torch_potentials/__init__.py`, keeping `EXTRA_HINT` and its
    wording. Every re-exported name is resolved on first access; nothing is imported at module scope, so
-   `md_simulations.core.forces`, `core.freezing` and the other numpy-only submodules import under the
-   `prep` and `cgschnet-dataset` extras. Audit the remaining `from md_simulations.core...` importers
+   `md_simulations.core.forces`, `core.replica_exchange` and `core.logging` — the submodules that need
+   no MD stack — import under the `prep` and `cgschnet-dataset` extras. (`core.freezing` is *not* one of
+   them: it imports openmm at module scope, like `integrators`, `equilibration`, `reporters`, `runner`,
+   `summary`, `remd` and `tracking`.) Audit the remaining `from md_simulations.core...` importers
    (`prep/migrate_forces.py`, `prep/cgschnet_dataset.py`, `sampling/umbrella.py`) against the extra each
    one belongs to; `umbrella.py` is `simulate`-side and may keep needing openmm.
 
