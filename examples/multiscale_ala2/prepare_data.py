@@ -2,10 +2,11 @@
 """Build the notebook's reference frames: subsample a T-REMD run, then relax it unconstrained.
 
 The shipped trajectory came from ``configs/ala2-amber14-implicit-remd-330K-train.yaml`` --
-101 ns of temperature replica exchange whose 330 K rung is a proper canonical ensemble at
+404 ns of temperature replica exchange whose 330 K rung is a proper canonical ensemble at
 330 K, but which crosses the alpha_L barrier far more often than plain MD does (alpha_L is
 1.7 % of frames here against 0.0004 % in a 10 ns plain run, so a plain run cannot show that
-basin at all).
+basin at all). The run reached 404 ns in three stages; ``--append`` below relaxes only the
+frames a later stage added, leaving the ones already on disk untouched.
 
 That run was integrated with ``constraints: hbonds``, which freezes all twelve X-H bonds at
 their ideal length and **removes their energy term from the force field**. The potential the
@@ -29,8 +30,14 @@ Defaults are calibrated for this system:
 
 Usage::
 
-    python prepare_data.py --repo /path/to/md-simulations          # ~2 min on 16 cores
+    python prepare_data.py --repo /path/to/md-simulations          # ~2 min per 20k frames, 16 cores
+    python prepare_data.py --repo ... --append                     # only the frames not yet relaxed
     python prepare_data.py --repo ... --stride 20 --workers 4      # quicker, coarser
+
+``--append`` keeps the existing frames byte for byte and relaxes only the tail, numbering it
+from where the file ends so the per-frame velocity seeds carry on unbroken. It refuses to run
+if the frames on disk are not the head of the current subsample -- a changed ``--stride``, or
+a source trajectory rewritten rather than extended, both land there.
 """
 
 import argparse
@@ -120,6 +127,40 @@ def xh_lengths(xyz: np.ndarray, pairs: list[tuple[int, int]]) -> np.ndarray:
     return np.stack([np.linalg.norm(xyz[:, j] - xyz[:, i], axis=-1) for i, j in pairs], axis=1)
 
 
+def check_append_head(existing: np.ndarray, xyz: np.ndarray, topology, probes: int = 5) -> None:
+    """Verify the frames already on disk are the head of the current subsample.
+
+    Relaxation moves the heavy atoms a little, so a stored frame never equals its source
+    exactly; it does stay far closer to the frame it came from than to that frame's
+    neighbours, which are a stride apart in a replica-exchange run and so near-independent.
+
+    :param existing: ``(M, N, 3)`` frames already relaxed, in nm.
+    :param xyz: ``(F, N, 3)`` current subsample before relaxation, in nm, ``F >= M``.
+    :param topology: mdtraj topology matching both.
+    :raises SystemExit: If a probe frame is closer to a neighbour than to its own source.
+    """
+
+    def rmsd(a: np.ndarray, b: np.ndarray) -> float:
+        frames = md.Trajectory(np.stack([a, b]).astype(np.float32), topology)
+        return float(md.rmsd(frames, frames, 0)[1])
+
+    for index in np.linspace(0, len(existing) - 1, probes).astype(int):
+        own = rmsd(existing[index], xyz[index])
+        neighbours = {
+            offset: rmsd(existing[index], xyz[index + offset])
+            for offset in (-1, 1)
+            if 0 <= index + offset < len(xyz)
+        }
+        if own >= min(neighbours.values()):
+            others = ", ".join(f"{o:+d}: {v:.4f}" for o, v in neighbours.items())
+            raise SystemExit(
+                f"frame {index} on disk does not match this subsample "
+                f"(rmsd {own:.4f} nm to its own source, {others} nm to its neighbours). "
+                f"The source trajectory or --stride changed; rebuild without --append."
+            )
+    print(f"  checked {probes} frames: the {len(existing)} on disk are this subsample's head")
+
+
 def basin_report(xyz: np.ndarray, topology, label: str) -> None:
     """Print the phi/psi basin populations of a set of frames.
 
@@ -150,6 +191,11 @@ def main() -> None:
     parser.add_argument("--friction", type=float, default=50.0, help="1/ps")
     parser.add_argument("--temperature", type=float, default=330.0, help="K")
     parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="relax only the frames beyond the existing ala2_330K_xyz.npy and append them",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING)
@@ -177,21 +223,49 @@ def main() -> None:
     xyz = trajectory.xyz[:, permutation, :].astype(np.float64)
     mdtraj_topology = md.Topology.from_openmm(free.topology)
     print(f"{len(xyz)} frames kept (every {args.stride}th of {source.name})")
-    basin_report(xyz, mdtraj_topology, "before relaxation")
+
+    # --- decide what still needs relaxing ---
+    out = HERE / "data"
+    destination = out / "ala2_330K_xyz.npy"
+    existing = None
+    start = 0
+    if args.append:
+        if not destination.exists():
+            raise SystemExit(f"--append needs {destination}, which does not exist")
+        existing = np.load(destination)
+        start = len(existing)
+        if start > len(xyz):
+            raise SystemExit(
+                f"{destination.name} holds {start} frames but this subsample has only "
+                f"{len(xyz)}; the source trajectory shrank. Rebuild without --append."
+            )
+        if existing.shape[1:] != xyz.shape[1:]:
+            raise SystemExit(
+                f"{destination.name} has shape {existing.shape[1:]} per frame, "
+                f"this subsample {xyz.shape[1:]}. Rebuild without --append."
+            )
+        check_append_head(existing, xyz, mdtraj_topology)
+        if start == len(xyz):
+            print(f"nothing to append: {destination.name} is already up to date")
+            return
+        print(f"appending {len(xyz) - start} frames to the {start} already relaxed")
+
+    fresh = xyz[start:]
+    basin_report(fresh, mdtraj_topology, "before relaxation")
 
     # --- relax every frame in the unconstrained potential ---
-    before = xh_lengths(xyz, pairs)
-    work = [(i, frame, args.steps) for i, frame in enumerate(xyz)]
+    before = xh_lengths(fresh, pairs)
+    work = [(start + i, frame, args.steps) for i, frame in enumerate(fresh)]
     with mp.Pool(
         args.workers,
         initializer=_init_worker,
         initargs=(free.system, args.temperature, args.friction, args.timestep),
     ) as pool:
-        relaxed = np.empty_like(xyz)
+        relaxed = np.empty_like(fresh)
         for done, (index, positions) in enumerate(
             pool.imap_unordered(_relax, work, chunksize=16), 1
         ):
-            relaxed[index] = positions
+            relaxed[index - start] = positions
             if done % 2000 == 0:
                 print(f"  relaxed {done}/{len(work)}")
 
@@ -203,11 +277,13 @@ def main() -> None:
     basin_report(relaxed, mdtraj_topology, "after relaxation")
 
     # --- write ---
-    out = HERE / "data"
-    np.save(out / "ala2_330K_xyz.npy", relaxed.astype(np.float32))
+    if existing is not None:
+        relaxed = np.concatenate([existing, relaxed.astype(np.float32)])
+        basin_report(relaxed, mdtraj_topology, "after relaxation (all)")
+    np.save(destination, relaxed.astype(np.float32))
     with open(out / "ala2_topology.pdb", "w") as handle:
         PDBFile.writeFile(free.topology, relaxed[0] * u.nanometer, handle, keepIds=True)
-    print(f"wrote {out / 'ala2_330K_xyz.npy'} {relaxed.shape} and {out / 'ala2_topology.pdb'}")
+    print(f"wrote {destination} {relaxed.shape} and {out / 'ala2_topology.pdb'}")
 
 
 if __name__ == "__main__":
