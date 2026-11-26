@@ -108,10 +108,22 @@ emit() {
 # newest first, for the error note below.
 UNDO=()
 remember_undo() { UNDO=("$1" ${UNDO[@]+"${UNDO[@]}"}); }
-# Move (never copy) a path, and record the command that puts it back.
+# Move (never copy) a path, and record the command that puts it back. The undo is recorded
+# *before* the mv, so a move that fails is listed too and the error note can say "check both
+# ends of it"; a `mv` that never happened undoes with a harmless "No such file".
 move() { # <from> <to>
-    run mv "$1" "$2"
     remember_undo "$(printf 'mv %q %q' "$2" "$1")"
+    run mv "$1" "$2"
+}
+
+# Stop with a message and the recovery note. `exit` does not fire the ERR trap, so every
+# deliberate abort after the trap is installed has to go through here or the note is lost --
+# and after step 6 the note is the only thing standing between the user and an `rm -rf` of
+# the only copy of the data.
+die() {
+    echo "error: $*" >&2
+    on_error
+    exit 1
 }
 
 # The existing ancestor of a path (a mkdir -p target need not exist yet).
@@ -123,6 +135,9 @@ existing_ancestor() {
 same_device() { [ "$(stat -c %d "$1")" = "$(stat -c %d "$(existing_ancestor "$2")")" ]; }
 shared_name() { printf '%s\n' "${1%%=*}"; }
 shared_target() { case "$1" in *=*) printf '%s\n' "${1#*=}" ;; *) printf '%s\n' "$1" ;; esac; }
+# A single directory name: no slash and no `..`, so no entry of SPLIT_DATA_LAB/SPLIT_DATA_SHARED
+# can name a path that leaves data/ (or the data root) and get moved.
+plain_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
 FAILED=0
 precondition() { # <description> <command...>
@@ -201,17 +216,22 @@ elif [ -d "$SRC/data" ]; then
             test "$((in_lab + in_shared))" -eq 1
     done
     for n in ${DATA_LAB[@]+"${DATA_LAB[@]}"} ${SHARED_NAMES[@]+"${SHARED_NAMES[@]}"}; do
+        precondition "assigned entry '$n' is a plain directory name" plain_name "$n"
         precondition "assigned entry data/$n exists" test -e "$SRC/data/$n"
     done
     precondition "md-simulations/data and $SPLIT_PARENT are on one filesystem (the moves are renames)" \
         same_device "$SRC/data" "$SPLIT_PARENT"
     if [ "${#DATA_SHARED[@]}" -gt 0 ]; then
         precondition "data root $DATA_ROOT is a directory" test -d "$DATA_ROOT"
+        # The symlink left in the lab repo's data/ points at $DATA_ROOT/<target>, so a relative
+        # root would leave a link that resolves against data/ and dangles.
+        precondition "data root $DATA_ROOT is an absolute path" \
+            bash -c 'case "$1" in /*) ;; *) exit 1 ;; esac' _ "$DATA_ROOT"
         precondition "md-simulations/data and $DATA_ROOT are on one filesystem" \
             same_device "$SRC/data" "$DATA_ROOT"
         for e in "${DATA_SHARED[@]}"; do
             precondition "shared target '$(shared_target "$e")' is a plain directory name" \
-                bash -c '[[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]' _ "$(shared_target "$e")"
+                plain_name "$(shared_target "$e")"
             precondition "$DATA_ROOT/$(shared_target "$e") does not exist" \
                 bash -c '! [ -e "$1" ] && ! [ -L "$1" ]' _ "$DATA_ROOT/$(shared_target "$e")"
         done
@@ -272,8 +292,7 @@ else
     draft docs/lab-repo-pyproject.toml | strip_pyproject_preamble >"$DEST/pyproject.toml"
     draft docs/lab-repo-README.md | strip_readme_preamble >"$DEST/README.md"
     if grep -q 'Delete th' "$DEST/pyproject.toml" "$DEST/README.md"; then
-        echo "error: a draft preamble survived the strip" >&2
-        exit 1
+        die "a draft preamble survived the strip"
     fi
 fi
 run git -C "$DEST" add pyproject.toml README.md
@@ -333,8 +352,7 @@ say "6. Move (not copy) the untracked Beamtime run store"
 if [ -d "$SRC/beamtime" ]; then
     # Refuse rather than let mv nest the store as $DEST/beamtime/beamtime.
     if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEST/beamtime" ]; then
-        echo "error: $DEST/beamtime already exists; not moving the run store onto it." >&2
-        exit 1
+        die "$DEST/beamtime already exists; not moving the run store onto it."
     fi
     move "$SRC/beamtime" "$DEST/beamtime"
 else
@@ -346,8 +364,7 @@ if [ -d "$SRC/data" ] && [ ! -L "$SRC/data" ]; then
     run mkdir -p "$DEST/data"
     for e in ${DATA_LAB[@]+"${DATA_LAB[@]}"}; do
         if [ "$DRY_RUN" -eq 0 ] && [ -e "$DEST/data/$e" ]; then
-            echo "error: $DEST/data/$e already exists; not moving onto it." >&2
-            exit 1
+            die "$DEST/data/$e already exists; not moving onto it."
         fi
         move "$SRC/data/$e" "$DEST/data/$e"
     done
