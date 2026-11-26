@@ -38,12 +38,12 @@ from typing import TYPE_CHECKING
 
 from md_simulations.config import load_config, resolve_data_root
 from md_simulations.config.base import SimulationConfig
-from md_simulations.engines import BuiltSystem, OpenMMEngine, build_engine
 from md_simulations.torch_potentials.protocol import PotentialLike
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator
 
+    from md_simulations.engines import BuiltSystem
     from md_simulations.torch_potentials.potential import Potential
 
 # Shared by every deferred import in the package (here and in __init__.__getattr__)
@@ -94,7 +94,7 @@ def _build_openmm_system(
     config: SimulationConfig,
     data_root: str | Path | None,
     quiet: bool,
-) -> BuiltSystem:
+) -> "BuiltSystem":
     """Build the engine's ``BuiltSystem``, rejecting engines with no OpenMM bridge.
 
     :param config: A validated engine-specific config model.
@@ -102,6 +102,10 @@ def _build_openmm_system(
     :param quiet: Suppress the verbose build output.
     :return: The engine's ``BuiltSystem`` (system, positions, box vectors).
     :raises NotImplementedError: If the config's engine has no calculator bridge."""
+    # Imported here, not at module scope: the engines pull in openmm and beamtime, and
+    # ``import md_simulations`` must stay free of both (the ``simulate`` extra).
+    from md_simulations.engines import OpenMMEngine, build_engine
+
     root = resolve_data_root(config, str(data_root) if data_root is not None else None)
 
     logger = logging.getLogger("md_simulations.torch_potentials")

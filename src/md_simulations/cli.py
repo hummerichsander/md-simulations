@@ -5,8 +5,6 @@ import sys
 from pathlib import Path
 
 from md_simulations.config import load_config, resolve_data_root
-from md_simulations.core import setup_logger
-from md_simulations.engines import build_engine
 from md_simulations.preflight import check_job, format_checks
 from md_simulations.workspace import WorkspaceError, load_workspace
 
@@ -16,6 +14,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     :param args: Parsed CLI arguments.
     :return: None."""
+    # Deferred: core and engines need the ``simulate`` extra, but ``md-sim check-job``
+    # and the other config-only commands must run without it.
+    try:
+        from md_simulations.core import setup_logger
+        from md_simulations.engines import build_engine
+    except ModuleNotFoundError as exc:  # message is core/engines ``EXTRA_HINT`` on a slim install
+        sys.exit(f"md-sim run: {exc}")
+
     config = load_config(args.config)
     data_root = resolve_data_root(config, args.data_root)
     output_dir = config.output_dir(data_root)

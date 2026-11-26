@@ -49,6 +49,11 @@ Applies to `src/md_simulations/torch_potentials/` (and any torch code elsewhere)
   their own module boundary, so their force conversion is derived rather than
   hand-written
 - Torch imports stay out of the eager import path (see `torch_potentials/__init__.py`)
+- So do openmm and beamtime: `import md_simulations` (and `md_simulations.torch_potentials`,
+  `config`, `workspace`, `preflight`, `cli`) imports none of `openmm`, `beamtime`, `tqdm`, `mdtraj`,
+  `torch`, `ase`. `md_simulations.engines` and `md_simulations.core` are the `simulate`-extra half and
+  raise `ModuleNotFoundError` naming that extra (`EXTRA_HINT`); import them inside the function that
+  needs them, never at module scope in the core layer. `tests/test_packaging.py` pins this.
 
 ## Project shape
 

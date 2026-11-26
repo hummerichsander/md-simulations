@@ -508,7 +508,7 @@ see the same answers, and anything the CLI learns later the server gets for free
 
 ## P. Packaging and dependency layering
 
-### P1. Take openmm and beamtime out of the eager import path (sonnet + review) — code
+### P1. Take openmm and beamtime out of the eager import path (sonnet + review) — code — **done**
 
 - **Touches:** `src/md_simulations/torch_potentials/build.py` (`from md_simulations.engines import
   BuiltSystem, OpenMMEngine, build_engine` 41, moved into the functions that use it),

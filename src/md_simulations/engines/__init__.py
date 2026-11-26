@@ -4,9 +4,26 @@ import logging
 from pathlib import Path
 
 from md_simulations.config.base import SimulationConfig
-from md_simulations.engines.base import BuiltSystem, Engine, OpenMMEngine
 
-__all__ = ["BuiltSystem", "Engine", "OpenMMEngine", "build_engine"]
+# Third-party modules that only the ``simulate`` extra installs. A ModuleNotFoundError
+# for one of these gets the install hint; any other missing module is left untouched.
+_SIMULATE_MODULES = frozenset({"openmm", "beamtime", "tqdm", "mdtraj", "parmed"})
+
+# Shared with the CLI and mirrored by ``torch_potentials.build.EXTRA_HINT``, so the
+# guidance is identical whichever entry point the user came through.
+EXTRA_HINT = (
+    "md_simulations.engines needs the 'simulate' extra: install with "
+    "`pip install 'md-simulations[simulate]'` (or `uv sync --extra simulate`)."
+)
+
+try:
+    from md_simulations.engines.base import BuiltSystem, Engine, OpenMMEngine
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".")[0] in _SIMULATE_MODULES:
+        raise ModuleNotFoundError(EXTRA_HINT, name=exc.name) from exc
+    raise
+
+__all__ = ["EXTRA_HINT", "BuiltSystem", "Engine", "OpenMMEngine", "build_engine"]
 
 
 def build_engine(
